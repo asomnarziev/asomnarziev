@@ -312,10 +312,23 @@ def get_all_stock():
     return _stock_cache["rows"]
 
 
+# Kirill (rus va o'zbek) harflarini lotinga o'giramiz, shunda "Холодильник" ham "xolodilnik" deb topiladi
+CYR_TO_LAT = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'j', 'з': 'z',
+    'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r',
+    'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'x', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sh',
+    'ъ': '', 'ы': 'i', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+    'ў': 'o', 'қ': 'q', 'ғ': 'g', 'ҳ': 'h',
+}
+
+
 def normalize(text):
-    text = str(text or "").lower()
-    for ch in "‘’ʻʼ`´":
-        text = text.replace(ch, "'")
+    """Qidiruv uchun matnni bir xil ko'rinishga keltiradi (faqat solishtirish uchun, foydalanuvchiga ko'rsatilmaydi):
+    kichik harf, kirill -> lotin, apostroflarsiz (qo'l = qol), h = x (holodilnik = xolodilnik)."""
+    text = "".join(CYR_TO_LAT.get(ch, ch) for ch in str(text or "").lower())
+    for ch in "'‘’ʻʼ`´":
+        text = text.replace(ch, "")
+    text = text.replace("h", "x")
     return " ".join(text.split())
 
 
