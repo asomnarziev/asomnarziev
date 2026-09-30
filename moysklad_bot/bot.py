@@ -283,6 +283,20 @@ def operating_expenses(payments, cur):
     return total
 
 
+def payment_type(doc):
+    """Qo'lda ochilgan kirim orderidagi "To'lov turi" qo'shimcha maydoni: 'cash' (Naxt), 'card' (Karta) yoki None."""
+    for a in doc.get('attributes', []):
+        if normalize(a.get('name')) != "tolov turi":
+            continue
+        value = a.get('value')
+        value = normalize(value.get('name') if isinstance(value, dict) else value)
+        if value.startswith("kart"):
+            return 'card'
+        if value.startswith(("nax", "naq", "nal")):
+            return 'cash'
+    return None
+
+
 def generate_final_summary(chat_id, s, e, l):
     cur = Currencies()
     money = lambda amount: fmt_money(amount, cur.base)
@@ -297,7 +311,7 @@ def generate_final_summary(chat_id, s, e, l):
     cashin_rows = ms_rows("/entity/cashin", period)
     cashout_rows = ms_rows("/entity/cashout", period)
 
-    # 3. Kassa (real) = o'tkazilgan chakana savdolar (розничные продажи), to'lov usullari bo'yicha
+    # 3. Kassa (real) = o'tkazilgan chakana savdolar (розничные продажи) + qo'lda ochilgan kirim orderlari, to'lov usullari bo'yicha
     retail = [r for r in ms_rows("/entity/retaildemand", period) if r.get('applicable', True)]
     # Qarz "iz avansa" orqali yuritiladi: chekning naqd, karta, QR va oldindan to'lovdan (предоплата) tashqari qismi
     for r in retail:
@@ -305,6 +319,13 @@ def generate_final_summary(chat_id, s, e, l):
                                               'prepaymentCashSum', 'prepaymentNoCashSum', 'prepaymentQrSum'))
         r['_debt'] = max(0, r.get('sum', 0) - paid)
     retail_qr = cur.total(retail, 'qrSum')
+    # Qo'lda ochilgan kirim orderlari (приходный ордер) "To'lov turi" bo'yicha naqd yoki kartaga qo'shiladi
+    applied_cashin = [r for r in cashin_rows if r.get('applicable', True)]
+    cashin_cash = cur.total([r for r in applied_cashin if payment_type(r) == 'cash'], 'sum')
+    cashin_card = cur.total([r for r in applied_cashin if payment_type(r) == 'card'], 'sum')
+    kassa_cash = cur.total(retail, 'cashSum') + cashin_cash
+    kassa_card = cur.total(retail, 'noCashSum') + cashin_card
+    kassa_total = cur.total(retail, 'sum') + cashin_cash + cashin_card
     retail_prepaid = cur.total(retail, 'prepaymentCashSum', 'prepaymentNoCashSum', 'prepaymentQrSum')
 
     # 4. Foyda = operatsion foyda (операционная прибыль): yalpi foyda - operatsion xarajatlar (kassa + bank to'lovlari)
@@ -321,9 +342,9 @@ def generate_final_summary(chat_id, s, e, l):
               f"💰 SAVDO (Umumiy): {money(total_s)}\n"
               f"📥 KIRIM PULLAR: {money(cur.total(cashin_rows, 'sum'))}\n"
               f"📉 RASXODLAR: {money(cur.total(cashout_rows, 'sum'))}\n"
-              f"🏦 <b>KASSA (REAL): {money(cur.total(retail, 'sum'))}</b>\n"
-              f"    ├ 💵 Naqd: {money(cur.total(retail, 'cashSum'))}\n"
-              f"    ├ 💳 Karta: {money(cur.total(retail, 'noCashSum'))}\n"
+              f"🏦 <b>KASSA (REAL): {money(kassa_total)}</b>\n"
+              f"    ├ 💵 Naqd: {money(kassa_cash)}\n"
+              f"    ├ 💳 Karta: {money(kassa_card)}\n"
               f"{extra_lines}"
               f"    └ 📝 Qarz: {money(cur.total(retail, '_debt'))}\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
