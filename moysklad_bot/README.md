@@ -4,7 +4,7 @@ Kichik biznes uchun Telegram bot: MoySklad'dan hisobotlarni to'g'ridan-to'g'ri T
 
 ## Imkoniyatlar
 
-- 📊 **Umumiy hisobot** — savdo, kassa kirim/chiqim, chakana savdo (naqd, karta, avansdan) va foyda (MoySklad "Прибыли и убытки" dagi операционная прибыль)
+- 📊 **Umumiy hisobot** — savdo, kassa kirim/chiqim, chakana savdo (naqd, karta, qarz) — hammasi dollarda, MoySklad hujjatidagi kurs bo'yicha va foyda (MoySklad "Прибыли и убытки" dagi операционная прибыль)
 - 📦 **Sotuv tovarlar bo'yicha** — tanlangan davrda eng ko'p sotilgan tovarlar
 - 📁 **Tovar qoldiqlari** — papkalar bo'yicha qoldiq soni va qiymati (hozirgi yoki tanlangan sana bo'yicha)
 - 🔎 **Tovar qidirish** — chatga tovar nomi (yoki artikul/kodi) yozilsa, o'xshash tovarlar qoldig'i chiqadi; xato yozilgan nomlarni ham topadi, kirill va lotinda yozilganini farqlamaydi (холодильник = xolodilnik = holodilnik), hech narsa bo'lmasa "topilmadi" deydi

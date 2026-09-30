@@ -1,6 +1,7 @@
 import os
 import json
 import html
+import math
 import time
 import difflib
 import datetime as dt
@@ -223,7 +224,51 @@ def generate_product_sales_report(chat_id, s, e, l):
 NON_OPERATING_EXPENSE_ITEMS = {"закупка товаров", "возврат", "перемещение", "налоги и сборы"}
 
 
-def operating_expenses(payments):
+def fmt_money(amount, iso):
+    if iso == "USD":
+        return f"${amount:,.2f}"
+    if iso == "UZS":
+        return f"{amount:,.0f} so'm"
+    return f"{amount:,.2f} {iso}"
+
+
+class Currencies:
+    """Hujjatlar turli valyutada bo'lishi mumkin (masalan, chakana savdo so'mda, hisobot esa dollarda).
+    Har bir hujjat summasi MoySklad'da shu hujjatga kiritilgan kurs bo'yicha asosiy valyutaga o'giriladi."""
+
+    def __init__(self):
+        rows = ms_rows("/entity/currency")
+        self.by_id = {c['id']: c for c in rows}
+        base = next((c for c in rows if c.get('default')), {})
+        self.base = base.get('isoCode') or "USD"
+
+    def factor(self, doc):
+        """1 birlik hujjat valyutasi = factor birlik asosiy valyuta."""
+        cur_id = doc.get('rate', {}).get('currency', {}).get('meta', {}).get('href', '').split('/')[-1]
+        c = self.by_id.get(cur_id)
+        if not c or c.get('default'):
+            return 1.0
+        m = c.get('multiplicity') or 1
+        cur_rate = c.get('rate') or 0
+        # Valyuta sozlamasidagi joriy kurs (to'g'ri yoki teskari kurs bo'lishi mumkin)
+        expected = (m / cur_rate if c.get('indirect') else cur_rate / m) if cur_rate else None
+        v = doc.get('rate', {}).get('value') or cur_rate
+        if not v:
+            return 1.0
+        # Hujjatdagi kurs qaysi yo'nalishda saqlanganini joriy kursga eng yaqin variant bo'yicha aniqlaymiz
+        candidates = [v, 1 / v, v / m, m / v]
+        if expected:
+            return min(candidates, key=lambda f: abs(math.log(f / expected)))
+        return v / m
+
+    def to_base(self, doc, *fields):
+        return sum(doc.get(f, 0) or 0 for f in fields) / 100 * self.factor(doc)
+
+    def total(self, docs, *fields):
+        return sum(self.to_base(d, *fields) for d in docs)
+
+
+def operating_expenses(payments, cur):
     """Operatsion xarajatlar: o'tkazilgan (проведённые) chiqim to'lovlari, tovar xaridi, qaytarish,
     ko'chirish va soliqlardan tashqari."""
     excluded_ids = {i['id'] for i in ms_rows("/entity/expenseitem")
@@ -234,46 +279,13 @@ def operating_expenses(payments):
             continue
         item_id = r.get('expenseItem', {}).get('meta', {}).get('href', '').split('/')[-1]
         if item_id not in excluded_ids:
-            total += r.get('sum', 0)
-    return total / 100
-
-
-def fmt_money(amount, iso):
-    if iso == "USD":
-        return f"${amount:,.2f}"
-    if iso == "UZS":
-        return f"{amount:,.0f} so'm"
-    return f"{amount:,.2f} {iso}"
-
-
-class Currencies:
-    """Hujjatlar turli valyutada bo'lishi mumkin (masalan, chakana savdo so'mda, hisobotlar dollarda).
-    Summalarni o'girmaymiz, har birini o'z valyutasida ko'rsatamiz."""
-
-    def __init__(self):
-        rows = ms_rows("/entity/currency")
-        self.iso = {c['id']: c.get('isoCode') or c.get('name', '') for c in rows}
-        self.base = next((self.iso[c['id']] for c in rows if c.get('default')), "USD")
-
-    def of(self, doc):
-        cur_id = doc.get('rate', {}).get('currency', {}).get('meta', {}).get('href', '').split('/')[-1]
-        return self.iso.get(cur_id, self.base)
-
-    def totals(self, docs, *fields):
-        """{valyuta: summa} ko'rinishida, maydonlar yig'indisi."""
-        out = {}
-        for d in docs:
-            iso = self.of(d)
-            out[iso] = out.get(iso, 0) + sum(d.get(f, 0) for f in fields) / 100
-        return out
-
-    def fmt(self, totals):
-        parts = [fmt_money(v, iso) for iso, v in totals.items() if v]
-        return " + ".join(parts) if parts else fmt_money(0, next(iter(totals), self.base))
+            total += cur.to_base(r, 'sum')
+    return total
 
 
 def generate_final_summary(chat_id, s, e, l):
     cur = Currencies()
+    money = lambda amount: fmt_money(amount, cur.base)
 
     # 1. Savdo va Yalpi foyda (валовая прибыль) - asosiy valyutada
     p_res = ms_rows("/report/profit/byvariant", {"momentFrom": s, "momentTo": e})
@@ -287,30 +299,35 @@ def generate_final_summary(chat_id, s, e, l):
 
     # 3. Kassa (real) = o'tkazilgan chakana savdolar (розничные продажи), to'lov usullari bo'yicha
     retail = [r for r in ms_rows("/entity/retaildemand", period) if r.get('applicable', True)]
-    retail_currency = {cur.of(r) for r in retail} or {cur.base}
-    empty = {iso: 0 for iso in retail_currency}
-    retail_qr = cur.totals(retail, 'qrSum')
-    # Iz avansa = chekning naqd, karta va QR dan tashqari qismi (avans/предоплата hisobidan yopilgan)
+    # Qarz "iz avansa" orqali yuritiladi: chekning naqd, karta, QR va oldindan to'lovdan (предоплата) tashqari qismi
     for r in retail:
-        r['_advance'] = max(0, r.get('sum', 0) - r.get('cashSum', 0) - r.get('noCashSum', 0) - r.get('qrSum', 0))
+        paid = sum(r.get(f, 0) or 0 for f in ('cashSum', 'noCashSum', 'qrSum',
+                                              'prepaymentCashSum', 'prepaymentNoCashSum', 'prepaymentQrSum'))
+        r['_debt'] = max(0, r.get('sum', 0) - paid)
+    retail_qr = cur.total(retail, 'qrSum')
+    retail_prepaid = cur.total(retail, 'prepaymentCashSum', 'prepaymentNoCashSum', 'prepaymentQrSum')
 
     # 4. Foyda = operatsion foyda (операционная прибыль): yalpi foyda - operatsion xarajatlar (kassa + bank to'lovlari)
-    operating_p = gross_p - operating_expenses(cashout_rows + ms_rows("/entity/paymentout", period))
+    operating_p = gross_p - operating_expenses(cashout_rows + ms_rows("/entity/paymentout", period), cur)
 
-    # QR orqali to'lov bo'lmasa, qatori ko'rsatilmaydi
-    qr_line = f"    ├ 📱 QR: {cur.fmt(retail_qr)}\n" if any(retail_qr.values()) else ""
+    # QR va oldindan to'lov bo'lmasa, ularning qatori ko'rsatilmaydi
+    extra_lines = ""
+    if retail_qr:
+        extra_lines += f"    ├ 📱 QR: {money(retail_qr)}\n"
+    if retail_prepaid:
+        extra_lines += f"    ├ 🔄 Oldindan to'lov: {money(retail_prepaid)}\n"
     report = (f"🗓 <b>UMUMIY HISOBOT: {l}</b>\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
-              f"💰 SAVDO (Umumiy): {fmt_money(total_s, cur.base)}\n"
-              f"📥 KIRIM PULLAR: {cur.fmt(cur.totals(cashin_rows, 'sum') or {cur.base: 0})}\n"
-              f"📉 RASXODLAR: {cur.fmt(cur.totals(cashout_rows, 'sum') or {cur.base: 0})}\n"
-              f"🏦 <b>KASSA (REAL): {cur.fmt(cur.totals(retail, 'sum') or empty)}</b>\n"
-              f"    ├ 💵 Naqd: {cur.fmt(cur.totals(retail, 'cashSum') or empty)}\n"
-              f"    ├ 💳 Karta: {cur.fmt(cur.totals(retail, 'noCashSum') or empty)}\n"
-              f"{qr_line}"
-              f"    └ 🔄 Iz avansa: {cur.fmt(cur.totals(retail, '_advance') or empty)}\n"
+              f"💰 SAVDO (Umumiy): {money(total_s)}\n"
+              f"📥 KIRIM PULLAR: {money(cur.total(cashin_rows, 'sum'))}\n"
+              f"📉 RASXODLAR: {money(cur.total(cashout_rows, 'sum'))}\n"
+              f"🏦 <b>KASSA (REAL): {money(cur.total(retail, 'sum'))}</b>\n"
+              f"    ├ 💵 Naqd: {money(cur.total(retail, 'cashSum'))}\n"
+              f"    ├ 💳 Karta: {money(cur.total(retail, 'noCashSum'))}\n"
+              f"{extra_lines}"
+              f"    └ 📝 Qarz: {money(cur.total(retail, '_debt'))}\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
-              f"💸 <b>FOYDA: {fmt_money(operating_p, cur.base)}</b>")
+              f"💸 <b>FOYDA: {money(operating_p)}</b>")
 
     bot.send_message(chat_id, report)
 
