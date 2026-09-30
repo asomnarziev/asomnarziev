@@ -587,10 +587,20 @@ def monthly_turnover(chat_id, start, end):
     txt = (f"📈 <b>AYLANMA OYLAR BO'YICHA</b>\n{fmt_period(start, end)}\n"
            f"<i>⭐ — eng ko'p bo'lgan oy, ⏳ — oy hali tugamagan</i>\n━━━━━━━━━━━━━━━━━━━━\n")
     if len(data) >= 2:
-        # Oxirgi oy undan oldingi oy bilan (nomlardagi "(1–10)", "⏳" belgilarisiz)
-        short_names = [n.split(" (")[0].replace(" ⏳", "") for n in names[-2:]]
-        txt += summary_lines(data[-2][1], data[-1][1], short_names, money)
-        partial = [full for full, short in zip(names[-2:], short_names) if full != short]
+        # Barcha oylar ketma-ket, foiz - birinchi oyga nisbatan (nomlardagi "(1–10)", "⏳" belgilarisiz)
+        short_names = [n.split(" (")[0].replace(" ⏳", "") for n in names]
+        totals = [t for _, t, _ in data]
+
+        def chain(key):
+            values = [money(t[key][1]) for t in totals]
+            if len(values) > 4:  # ko'p oyda qator cho'zilmasin: birinchi, oxirgidan oldingi va oxirgi
+                values = [values[0], "…", values[-2]] + values[-1:]
+            values[-1] = f"<b>{values[-1]}</b>"
+            return " → ".join(values) + f" ({trend_text(totals[0][key][1], totals[-1][key][1])})"
+
+        txt += (f"<b>Qisqacha ({short_names[0]} → {short_names[-1]}, {short_names[-1]} {short_names[0]}ga nisbatan):</b>\n"
+                f"📤 Rasxod: {chain('outcome')}\n📥 Prixod: {chain('income')}\n📦 Yakuniy qoldiq: {chain('onPeriodEnd')}\n")
+        partial = [full for full, short in zip(names, short_names) if full != short]
         if partial:
             txt += f"<i>Diqqat: {', '.join(partial)} — to'liq oy emas</i>\n"
         txt += "━━━━━━━━━━━━━━━━━━━━\n"
