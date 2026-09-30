@@ -162,6 +162,7 @@ def dispatch_callback(call):
 
     if call.data.startswith("cal:"): handle_calendar(call)
     elif call.data.startswith("pr:"): handle_preset(call)
+    elif call.data.startswith("top:"): handle_top_choice(call)
     # Eski xabarlardagi tugmalar ham ishlashi uchun
     elif call.data in ("date_today", "date_yesterday"):
         call.data = "pr:" + call.data[5:]
@@ -200,19 +201,29 @@ def process_reports(chat_id, s, e, l):
 
 
 def generate_product_sales_report(chat_id, s, e, l):
-    res = ms_rows("/report/profit/byvariant", {"momentFrom": s, "momentTo": e})
+    """Eng ko'p sotilgan tovarlar (sotuv summasi bo'yicha), tanlangan Top N ta."""
+    top_n = user_steps.get(chat_id, {}).get('top_n', TOP_SIZES[0])
+    res = [r for r in ms_rows("/report/profit/byvariant", {"momentFrom": s, "momentTo": e}) if r.get('sellSum', 0)]
     if not res:
         bot.send_message(chat_id, f"📦 <b>{l}</b> davrida sotuvlar topilmadi.")
         return
-    # Eng ko'p sotilganlar birinchi
     res.sort(key=lambda r: r.get('sellSum', 0), reverse=True)
-    txt = f"📦 <b>SOTUV TOVARLAR ({l})</b>\n\n"
-    for r in res[:25]:
-        name = r.get('variantName') or r.get('name')
-        if not name: name = r.get('assortment', {}).get('name', "Noma'lum tovar")
-        txt += f"🔹 {esc(name[:30])}\n    └ {r.get('sellQuantity', 0):,.0f} ta | ${r.get('sellSum', 0)/100:,.2f}\n"
-    if len(res) > 25:
-        txt += f"\n... va yana {len(res) - 25} ta tovar"
+    top = res[:top_n]
+    base = Currencies().base  # hisobot summalari asosiy valyutada
+    money = lambda amount: fmt_money(amount, base)
+    total_sum = sum(r.get('sellSum', 0) for r in res) / 100
+    top_sum = sum(r.get('sellSum', 0) for r in top) / 100
+    top_qty = sum(r.get('sellQuantity', 0) or 0 for r in top)
+    share = f", umumiy savdoning {top_sum / total_sum * 100:.0f}%" if total_sum else ""
+    txt = (f"🏆 <b>TOP {top_n} SOTUV: {l}</b>\n<i>Sotuv summasi bo'yicha</i>\n━━━━━━━━━━━━━━━━━━━━\n"
+           f"Sotilgan tovar turlari: {len(res)} ta\n"
+           f"Top {len(top)} jami: <b>{fmt_qty(top_qty)} ta | {money(top_sum)}</b>{share}\n"
+           f"━━━━━━━━━━━━━━━━━━━━\n\n")
+    for i, r in enumerate(top, 1):
+        name = r.get('variantName') or r.get('name') or r.get('assortment', {}).get('name') or "Noma'lum tovar"
+        txt += f"<b>{i}.</b> {esc(name[:45])}\n      {fmt_qty(r.get('sellQuantity', 0) or 0)} ta | {money(r.get('sellSum', 0) / 100)}\n"
+    if len(res) > top_n:
+        txt += f"\n<i>... va yana {len(res) - top_n} ta tovar</i>"
     send_long(chat_id, txt)
 
 
@@ -649,18 +660,40 @@ def calculate_folder_stock(call):
     send_long(chat_id, f"📋 <b>QOLDIQLAR ({label})</b>\n\n{details}\n🔢 Jami: {qty:,.0f} ta\n💰 Qiymati: ${total:,.2f}")
 
 
-@bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text in ["📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "🔄 Aylanma"])
-def sales_init(message):
-    user_steps[message.chat.id] = {'report_type': message.text}
+TOP_SIZES = (50, 100, 150)
+
+
+def period_markup(report_type):
     btn = types.InlineKeyboardButton
     markup = types.InlineKeyboardMarkup()
     markup.row(btn("Bugun", callback_data="pr:today"), btn("Kecha", callback_data="pr:yesterday"))
     markup.row(btn("Shu hafta", callback_data="pr:week"), btn("O'tgan hafta", callback_data="pr:lastweek"))
     markup.row(btn("Shu oy", callback_data="pr:month"), btn("O'tgan oy", callback_data="pr:lastmonth"))
     markup.row(btn("📅 Kalendardan tanlash", callback_data="cal:o:r"))
-    if message.text == "🔄 Aylanma":
+    if report_type == "🔄 Aylanma":
         markup.row(btn("🆚 Solishtirish", callback_data="cmpmenu"))
-    bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nDavrni tanlang:", reply_markup=markup)
+    return markup
+
+
+@bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text in ["📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "🔄 Aylanma"])
+def sales_init(message):
+    user_steps[message.chat.id] = {'report_type': message.text}
+    if message.text == "📦 Sotuv Tovarlar Bo'yicha":
+        # Avval nechta tovar ko'rsatilishi, keyin davr tanlanadi
+        markup = types.InlineKeyboardMarkup()
+        markup.row(*[types.InlineKeyboardButton(f"🏆 Top {n}", callback_data=f"top:{n}") for n in TOP_SIZES])
+        bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nEng ko'p sotilgan nechta tovar ko'rsatilsin?",
+                         reply_markup=markup)
+        return
+    bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nDavrni tanlang:", reply_markup=period_markup(message.text))
+
+
+def handle_top_choice(call):
+    chat_id = call.message.chat.id
+    n = int(call.data[4:])
+    user_steps[chat_id].update({'report_type': "📦 Sotuv Tovarlar Bo'yicha", 'top_n': n})
+    bot.edit_message_text(f"<b>📦 Sotuv Tovarlar Bo'yicha — Top {n}</b>\n\nDavrni tanlang:", chat_id,
+                          call.message.message_id, reply_markup=period_markup(user_steps[chat_id]['report_type']))
 
 
 @bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text == "📁 Tovar Qoldiqlari")
