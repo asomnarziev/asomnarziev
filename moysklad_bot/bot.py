@@ -238,44 +238,79 @@ def operating_expenses(payments):
     return total / 100
 
 
+def fmt_money(amount, iso):
+    if iso == "USD":
+        return f"${amount:,.2f}"
+    if iso == "UZS":
+        return f"{amount:,.0f} so'm"
+    return f"{amount:,.2f} {iso}"
+
+
+class Currencies:
+    """Hujjatlar turli valyutada bo'lishi mumkin (masalan, chakana savdo so'mda, hisobotlar dollarda).
+    Summalarni o'girmaymiz, har birini o'z valyutasida ko'rsatamiz."""
+
+    def __init__(self):
+        rows = ms_rows("/entity/currency")
+        self.iso = {c['id']: c.get('isoCode') or c.get('name', '') for c in rows}
+        self.base = next((self.iso[c['id']] for c in rows if c.get('default')), "USD")
+
+    def of(self, doc):
+        cur_id = doc.get('rate', {}).get('currency', {}).get('meta', {}).get('href', '').split('/')[-1]
+        return self.iso.get(cur_id, self.base)
+
+    def totals(self, docs, *fields):
+        """{valyuta: summa} ko'rinishida, maydonlar yig'indisi."""
+        out = {}
+        for d in docs:
+            iso = self.of(d)
+            out[iso] = out.get(iso, 0) + sum(d.get(f, 0) for f in fields) / 100
+        return out
+
+    def fmt(self, totals):
+        parts = [fmt_money(v, iso) for iso, v in totals.items() if v]
+        return " + ".join(parts) if parts else fmt_money(0, next(iter(totals), self.base))
+
+
 def generate_final_summary(chat_id, s, e, l):
-    # 1. Savdo va Yalpi foyda (валовая прибыль)
+    cur = Currencies()
+
+    # 1. Savdo va Yalpi foyda (валовая прибыль) - asosiy valyutada
     p_res = ms_rows("/report/profit/byvariant", {"momentFrom": s, "momentTo": e})
     total_s = sum(r.get('sellSum', 0) for r in p_res) / 100
     gross_p = sum(r.get('profit', 0) for r in p_res) / 100
 
     # 2. Kassa Orderlari (Kirim va Chiqim)
     period = {"filter": f"moment>={s};moment<={e}"}
-    total_cashin = sum(r.get('sum', 0) for r in ms_rows("/entity/cashin", period)) / 100
+    cashin_rows = ms_rows("/entity/cashin", period)
     cashout_rows = ms_rows("/entity/cashout", period)
-    total_cashout = sum(r.get('sum', 0) for r in cashout_rows) / 100
 
     # 3. Kassa (real) = o'tkazilgan chakana savdolar (розничные продажи), to'lov usullari bo'yicha
     retail = [r for r in ms_rows("/entity/retaildemand", period) if r.get('applicable', True)]
-    retail_total = sum(r.get('sum', 0) for r in retail) / 100
-    retail_cash = sum(r.get('cashSum', 0) for r in retail) / 100
-    retail_card = sum(r.get('noCashSum', 0) for r in retail) / 100
-    retail_qr = sum(r.get('qrSum', 0) for r in retail) / 100
-    retail_advance = sum(r.get('prepaymentCashSum', 0) + r.get('prepaymentNoCashSum', 0) + r.get('prepaymentQrSum', 0)
-                         for r in retail) / 100
+    retail_currency = {cur.of(r) for r in retail} or {cur.base}
+    empty = {iso: 0 for iso in retail_currency}
+    retail_qr = cur.totals(retail, 'qrSum')
+    # Iz avansa = chekning naqd, karta va QR dan tashqari qismi (avans/предоплата hisobidan yopilgan)
+    for r in retail:
+        r['_advance'] = max(0, r.get('sum', 0) - r.get('cashSum', 0) - r.get('noCashSum', 0) - r.get('qrSum', 0))
 
     # 4. Foyda = operatsion foyda (операционная прибыль): yalpi foyda - operatsion xarajatlar (kassa + bank to'lovlari)
     operating_p = gross_p - operating_expenses(cashout_rows + ms_rows("/entity/paymentout", period))
 
     # QR orqali to'lov bo'lmasa, qatori ko'rsatilmaydi
-    qr_line = f"    ├ 📱 QR: ${retail_qr:,.2f}\n" if retail_qr else ""
+    qr_line = f"    ├ 📱 QR: {cur.fmt(retail_qr)}\n" if any(retail_qr.values()) else ""
     report = (f"🗓 <b>UMUMIY HISOBOT: {l}</b>\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
-              f"💰 SAVDO (Umumiy): ${total_s:,.2f}\n"
-              f"📥 KIRIM PULLAR: ${total_cashin:,.2f}\n"
-              f"📉 RASXODLAR: ${total_cashout:,.2f}\n"
-              f"🏦 <b>KASSA (REAL): ${retail_total:,.2f}</b>\n"
-              f"    ├ 💵 Naqd: ${retail_cash:,.2f}\n"
-              f"    ├ 💳 Karta: ${retail_card:,.2f}\n"
+              f"💰 SAVDO (Umumiy): {fmt_money(total_s, cur.base)}\n"
+              f"📥 KIRIM PULLAR: {cur.fmt(cur.totals(cashin_rows, 'sum') or {cur.base: 0})}\n"
+              f"📉 RASXODLAR: {cur.fmt(cur.totals(cashout_rows, 'sum') or {cur.base: 0})}\n"
+              f"🏦 <b>KASSA (REAL): {cur.fmt(cur.totals(retail, 'sum') or empty)}</b>\n"
+              f"    ├ 💵 Naqd: {cur.fmt(cur.totals(retail, 'cashSum') or empty)}\n"
+              f"    ├ 💳 Karta: {cur.fmt(cur.totals(retail, 'noCashSum') or empty)}\n"
               f"{qr_line}"
-              f"    └ 🔄 Iz avansa: ${retail_advance:,.2f}\n"
+              f"    └ 🔄 Iz avansa: {cur.fmt(cur.totals(retail, '_advance') or empty)}\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
-              f"💸 <b>FOYDA: ${operating_p:,.2f}</b>")
+              f"💸 <b>FOYDA: {fmt_money(operating_p, cur.base)}</b>")
 
     bot.send_message(chat_id, report)
 
