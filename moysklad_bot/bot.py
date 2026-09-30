@@ -165,7 +165,7 @@ def dispatch_callback(call):
     if call.data.startswith("cal:"): handle_calendar(call)
     elif call.data.startswith("pr:"): handle_preset(call)
     elif call.data.startswith("top:"): handle_top_choice(call)
-    elif call.data == "topmenu": show_top_menu(call)
+    elif call.data == "topmenu": show_top_menu(call)  # eski xabarlardagi tugma
     elif call.data == "stale": generate_stale_products(chat_id)
     elif call.data.startswith("stp:"): handle_stale_page(call)
     # Eski xabarlardagi tugmalar ham ishlashi uchun
@@ -820,8 +820,6 @@ def period_markup(report_type):
     markup.row(btn("📅 Kalendardan tanlash", callback_data="cal:o:r"))
     if report_type == "🔄 Aylanma":
         markup.row(btn("🆚 Solishtirish", callback_data="cmpmenu"))
-    if report_type == "📦 Sotuv Tovarlar Bo'yicha":
-        markup.row(btn("🏆 Top tovarlar (eng ko'p / eng kam)", callback_data="topmenu"))
     return markup
 
 
