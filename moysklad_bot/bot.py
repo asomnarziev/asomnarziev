@@ -297,6 +297,15 @@ def payment_type(doc):
     return None
 
 
+def linked_to_shift(doc):
+    """Kassa smenasiga (розничная смена) bog'langan order - chakana savdo bilan avtomatik yaratilgan, u allaqachon
+    chakana savdo summasida bor. Bog'liqlik smena maydonida yoki bog'langan hujjatlarda (operations) bo'lishi mumkin."""
+    if doc.get('retailShift'):
+        return True
+    retail_types = {'retailshift', 'retaildemand', 'retailsalesreturn'}
+    return any(op.get('meta', {}).get('type') in retail_types for op in doc.get('operations', []))
+
+
 def generate_final_summary(chat_id, s, e, l):
     cur = Currencies()
     money = lambda amount: fmt_money(amount, cur.base)
@@ -319,8 +328,8 @@ def generate_final_summary(chat_id, s, e, l):
                                               'prepaymentCashSum', 'prepaymentNoCashSum', 'prepaymentQrSum'))
         r['_debt'] = max(0, r.get('sum', 0) - paid)
     retail_qr = cur.total(retail, 'qrSum')
-    # Qo'lda ochilgan kirim orderlari (приходный ордер) "To'lov turi" bo'yicha naqd yoki kartaga qo'shiladi
-    applied_cashin = [r for r in cashin_rows if r.get('applicable', True)]
+    # Qo'lda ochilgan kirim orderlari (smenaga bog'lanmagan приходный ордер) "To'lov turi" bo'yicha naqd yoki kartaga qo'shiladi
+    applied_cashin = [r for r in cashin_rows if r.get('applicable', True) and not linked_to_shift(r)]
     cashin_cash = cur.total([r for r in applied_cashin if payment_type(r) == 'cash'], 'sum')
     cashin_card = cur.total([r for r in applied_cashin if payment_type(r) == 'card'], 'sum')
     kassa_cash = cur.total(retail, 'cashSum') + cashin_cash
