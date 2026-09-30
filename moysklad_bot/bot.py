@@ -6,12 +6,15 @@ import time
 import difflib
 import calendar
 import datetime as dt
+from io import BytesIO
 from zoneinfo import ZoneInfo
 
 import requests
 import telebot
 from telebot import types
 from dotenv import load_dotenv
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
 
 # --- SOZLAMALAR ---
 # Tokenlar kodda emas, .env faylida saqlanadi (.env.example ga qarang)
@@ -101,7 +104,7 @@ def send_long(chat_id, text):
 def main_menu(chat_id):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton("📊 Umumiy Hisobot"), types.KeyboardButton("📦 Sotuv Tovarlar Bo'yicha"))
-    markup.add(types.KeyboardButton("📁 Tovar Qoldiqlari"))
+    markup.add(types.KeyboardButton("📁 Tovar Qoldiqlari"), types.KeyboardButton("🔄 Aylanma"))
     bot.send_message(chat_id, "👋 Bo'limni tanlang:", reply_markup=markup)
 
 
@@ -171,6 +174,7 @@ def dispatch_callback(call):
     elif call.data == "back_root": show_stock_folders(chat_id, None, call.message.message_id)
     elif call.data.startswith('nav_'): show_stock_folders(chat_id, call.data.split('_')[1], call.message.message_id)
     elif call.data.startswith('fcalc_'): calculate_folder_stock(call)
+    elif call.data.startswith('tx:'): send_turnover_excel(call)
 
 
 # --- HISOBOTLAR ---
@@ -179,6 +183,8 @@ def process_reports(chat_id, s, e, l):
     bot.send_message(chat_id, f"⏳ <b>{l}</b> hisoboti tayyorlanmoqda...")
     if rtype == "📦 Sotuv Tovarlar Bo'yicha":
         generate_product_sales_report(chat_id, s, e, l)
+    elif rtype == "🔄 Aylanma":
+        generate_turnover_report(chat_id, s, e, l)
     else:
         generate_final_summary(chat_id, s, e, l)
 
@@ -334,6 +340,102 @@ def generate_final_summary(chat_id, s, e, l):
     bot.send_message(chat_id, report)
 
 
+# --- AYLANMA (ОБОРОТЫ) ---
+TURNOVER_PARTS = [("onPeriodStart", "Boshida"), ("income", "Kirim"), ("outcome", "Chiqim"), ("onPeriodEnd", "Oxirida")]
+
+
+def fmt_qty(q):
+    return f"{q:,.0f}" if float(q).is_integer() else f"{q:,.2f}"
+
+
+def turnover_rows(s, e):
+    """MoySklad "Обороты" hisoboti: har bir tovar bo'yicha davr boshidagi, kirim, chiqim va oxiridagi soni/summasi."""
+    return ms_rows("/report/turnover/all", {"momentFrom": s, "momentTo": e})
+
+
+def turnover_totals(rows):
+    return {key: (sum(r.get(key, {}).get('quantity', 0) or 0 for r in rows),
+                  sum(r.get(key, {}).get('sum', 0) or 0 for r in rows) / 100) for key, _ in TURNOVER_PARTS}
+
+
+def generate_turnover_report(chat_id, s, e, l):
+    rows = turnover_rows(s, e)
+    if not rows:
+        bot.send_message(chat_id, f"🔄 <b>{l}</b> davrida tovar harakati topilmadi.")
+        return
+    base = Currencies().base  # hisobot summalari asosiy valyutada
+    money = lambda amount: fmt_money(amount, base)
+    totals = turnover_totals(rows)
+    icons = {"onPeriodStart": "📦", "income": "📥", "outcome": "📤", "onPeriodEnd": "📦"}
+    txt = f"🔄 <b>AYLANMA: {l}</b>\n━━━━━━━━━━━━━━━━━━━━\n"
+    for key, name in TURNOVER_PARTS:
+        qty, total = totals[key]
+        txt += f"{icons[key]} {name}: <b>{fmt_qty(qty)}</b> ta | {money(total)}\n"
+    txt += f"━━━━━━━━━━━━━━━━━━━━\n🔢 Tovarlar soni: {len(rows)}\n\n<b>Eng ko'p chiqim bo'lganlar:</b>\n"
+    top = sorted(rows, key=lambda r: r.get('outcome', {}).get('quantity', 0) or 0, reverse=True)[:20]
+    for r in top:
+        a = r.get('assortment', {})
+        q = {key: r.get(key, {}).get('quantity', 0) or 0 for key, _ in TURNOVER_PARTS}
+        end_sum = (r.get('onPeriodEnd', {}).get('sum', 0) or 0) / 100
+        name = a.get('name') or "Noma'lum"
+        txt += (f"🔹 {esc(name[:35])}\n"
+                f"    {fmt_qty(q['onPeriodStart'])} ➜ +{fmt_qty(q['income'])} / −{fmt_qty(q['outcome'])} ➜ "
+                f"<b>{fmt_qty(q['onPeriodEnd'])}</b> ta | {money(end_sum)}\n")
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("📄 Excel'da to'liq", callback_data=f"tx:{s[:10]}:{e[:10]}"))
+    send_long(chat_id, txt)
+    bot.send_message(chat_id, f"Barcha {len(rows)} ta tovar jadvali:", reply_markup=markup)
+
+
+def send_turnover_excel(call):
+    chat_id = call.message.chat.id
+    _, d1, d2 = call.data.split(":")
+    start, end = dt.date.fromisoformat(d1), dt.date.fromisoformat(d2)
+    rows = sorted(turnover_rows(f"{d1} 00:00:00", f"{d2} 23:59:59"), key=lambda r: r.get('assortment', {}).get('name', ''))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Aylanma"
+    bold, center = Font(bold=True), Alignment(horizontal="center", vertical="center")
+    fill = PatternFill("solid", fgColor="DDEBF7")
+    ws.append([f"Aylanma: {fmt_period(start, end)}"])
+    ws["A1"].font = Font(bold=True, size=13)
+    ws.append(["Nomi", "Kod", "Artikul", "O'lch. birl."] + [n for _, n in TURNOVER_PARTS for _ in (0, 1)])
+    ws.append(["", "", "", ""] + ["Soni", "Summa"] * len(TURNOVER_PARTS))
+    for col in range(1, 5):
+        ws.merge_cells(start_row=2, start_column=col, end_row=3, end_column=col)
+    for i in range(len(TURNOVER_PARTS)):
+        ws.merge_cells(start_row=2, start_column=5 + 2 * i, end_row=2, end_column=6 + 2 * i)
+    for row in ws.iter_rows(min_row=2, max_row=3):
+        for c in row:
+            c.font, c.alignment, c.fill = bold, center, fill
+    for r in rows:
+        a = r.get('assortment', {})
+        values = []
+        for key, _ in TURNOVER_PARTS:
+            part = r.get(key, {})
+            values += [part.get('quantity', 0) or 0, (part.get('sum', 0) or 0) / 100]
+        ws.append([a.get('name', ''), a.get('code', ''), a.get('article', ''), a.get('uom', {}).get('name', '')] + values)
+    totals = turnover_totals(rows)
+    ws.append(["JAMI", "", "", ""] + [v for key, _ in TURNOVER_PARTS for v in totals[key]])
+    for c in ws[ws.max_row]:
+        c.font = bold
+    for row in ws.iter_rows(min_row=4, min_col=5):
+        for c in row:
+            is_sum = (c.column - 5) % 2
+            c.number_format = '#,##0.00' if is_sum or not float(c.value or 0).is_integer() else '#,##0'
+    ws.column_dimensions["A"].width = 45
+    for col, width in zip("BCDEFGHIJKL", [10, 12, 10] + [10, 14] * 4):
+        ws.column_dimensions[col].width = width
+    ws.freeze_panes = "B4"
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    buf.name = f"aylanma_{start:%d.%m.%Y}-{end:%d.%m.%Y}.xlsx"
+    bot.send_document(chat_id, buf, caption=f"🔄 Aylanma: {fmt_period(start, end)} ({len(rows)} ta tovar)")
+
+
 # --- QOLDIQLAR ---
 def parent_folder_id(folder):
     return folder.get('productFolder', {}).get('meta', {}).get('href', '').split('/')[-1]
@@ -374,7 +476,7 @@ def calculate_folder_stock(call):
     send_long(chat_id, f"📋 <b>QOLDIQLAR ({label})</b>\n\n{details}\n🔢 Jami: {qty:,.0f} ta\n💰 Qiymati: ${total:,.2f}")
 
 
-@bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text in ["📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha"])
+@bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text in ["📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "🔄 Aylanma"])
 def sales_init(message):
     user_steps[message.chat.id] = {'report_type': message.text}
     btn = types.InlineKeyboardButton
@@ -526,7 +628,7 @@ def handle_calendar(call):
 
 
 # --- TOVAR QIDIRISH ---
-MENU_BUTTONS = {"📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "📁 Tovar Qoldiqlari"}
+MENU_BUTTONS = {"📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "📁 Tovar Qoldiqlari", "🔄 Aylanma"}
 STOCK_CACHE_SECONDS = 60
 _stock_cache = {"time": 0, "rows": []}
 

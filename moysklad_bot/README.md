@@ -8,6 +8,7 @@ Kichik biznes uchun Telegram bot: MoySklad'dan hisobotlarni to'g'ridan-to'g'ri T
 - 📅 **Davr tanlash** — tayyor davrlar (bugun, kecha, shu/o'tgan hafta, shu/o'tgan oy) yoki kalendarda boshlanish va tugash kunini bosish
 - 📦 **Sotuv tovarlar bo'yicha** — tanlangan davrda eng ko'p sotilgan tovarlar
 - 📁 **Tovar qoldiqlari** — papkalar bo'yicha qoldiq soni va qiymati (hozirgi yoki tanlangan sana bo'yicha)
+- 🔄 **Aylanma** — MoySklad "Обороты": davr boshidagi, kirim, chiqim va oxiridagi soni/summasi; eng ko'p chiqim bo'lgan 20 ta tovar va to'liq jadval Excel faylda
 - 🔎 **Tovar qidirish** — chatga tovar nomi (yoki artikul/kodi) yozilsa, o'xshash tovarlar qoldig'i chiqadi; xato yozilgan nomlarni ham topadi, kirill va lotinda yozilganini farqlamaydi (холодильник = xolodilnik = holodilnik), hech narsa bo'lmasa "topilmadi" deydi
 - 🔐 **Ruxsat tizimi** — yangi foydalanuvchi `/start` bosganda admin tasdiqlaydi yoki rad etadi
 
