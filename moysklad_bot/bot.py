@@ -276,7 +276,7 @@ def operating_expenses(payments, cur):
 
 
 def payment_type(doc):
-    """Qo'lda ochilgan kirim orderidagi "To'lov turi" qo'shimcha maydoni: 'cash' (Naxt), 'card' (Karta) yoki None."""
+    """Qo'lda ochilgan kirim/chiqim orderidagi "To'lov turi" qo'shimcha maydoni: 'cash' (Naxt), 'card' (Karta) yoki None."""
     for a in doc.get('attributes', []):
         if normalize(a.get('name')) != "tolov turi":
             continue
@@ -323,8 +323,12 @@ def generate_final_summary(chat_id, s, e, l):
     applied_cashin = [r for r in cashin_rows if r.get('applicable', True) and not linked_to_shift(r)]
     cashin_cash = cur.total([r for r in applied_cashin if payment_type(r) == 'cash'], 'sum')
     cashin_card = cur.total([r for r in applied_cashin if payment_type(r) == 'card'], 'sum')
-    kassa_cash = cur.total(retail, 'cashSum') + cashin_cash
-    kassa_card = cur.total(retail, 'noCashSum') + cashin_card
+    # Qo'lda ochilgan chiqim orderlari (расходный ордер) "To'lov turi" bo'yicha naqd yoki kartadan ayriladi
+    applied_cashout = [r for r in cashout_rows if r.get('applicable', True) and not linked_to_shift(r)]
+    cashout_cash = cur.total([r for r in applied_cashout if payment_type(r) == 'cash'], 'sum')
+    cashout_card = cur.total([r for r in applied_cashout if payment_type(r) == 'card'], 'sum')
+    kassa_cash = cur.total(retail, 'cashSum') + cashin_cash - cashout_cash
+    kassa_card = cur.total(retail, 'noCashSum') + cashin_card - cashout_card
     # Qarz kassaga tushgan pul emas: u KASSA tagida ko'rsatiladi, lekin jamiga qo'shilmaydi (KASSA = naqd + karta)
     kassa_total = kassa_cash + kassa_card
 
