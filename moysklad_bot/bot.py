@@ -1,6 +1,8 @@
 import os
 import json
 import html
+import time
+import difflib
 import datetime as dt
 
 import requests
@@ -294,6 +296,80 @@ def handle_quick_dates(call):
         y = now - dt.timedelta(days=1)
         s, e, l = y.strftime("%Y-%m-%d 00:00:00"), y.strftime("%Y-%m-%d 23:59:59"), "KECHA"
     process_reports(call.message.chat.id, s, e, l)
+
+
+# --- TOVAR QIDIRISH ---
+MENU_BUTTONS = {"📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "📁 Tovar Qoldiqlari"}
+STOCK_CACHE_SECONDS = 60
+_stock_cache = {"time": 0, "rows": []}
+
+
+def get_all_stock():
+    """Barcha tovarlar qoldig'i. Har bir xabarda MoySklad'ga qayta so'rov yubormaslik uchun 1 daqiqa saqlanadi."""
+    if time.time() - _stock_cache["time"] > STOCK_CACHE_SECONDS:
+        _stock_cache["rows"] = ms_rows("/report/stock/all", {"includeEmpty": "true"})
+        _stock_cache["time"] = time.time()
+    return _stock_cache["rows"]
+
+
+def normalize(text):
+    text = str(text or "").lower()
+    for ch in "‘’ʻʼ`´":
+        text = text.replace(ch, "'")
+    return " ".join(text.split())
+
+
+def find_products(query, rows):
+    """Avval nomida (yoki artikul/kodida) so'rovdagi barcha so'zlar borlarini qidiradi.
+    Hech narsa topilmasa, xato yozilgan so'zlarga yaqin nomlarni qidiradi."""
+    q = normalize(query)
+    words = q.split()
+    exact = []
+    for r in rows:
+        name = normalize(r.get('name'))
+        text = f"{name} {normalize(r.get('article'))} {normalize(r.get('code'))}"
+        if all(w in text for w in words):
+            exact.append((0 if name.startswith(q) else 1, name, r))
+    if exact:
+        return [r for *_, r in sorted(exact, key=lambda x: x[:2])], True
+
+    fuzzy = []
+    for r in rows:
+        name = normalize(r.get('name'))
+        name_words = name.split()
+        if not name_words:
+            continue
+        # Har bir so'z uchun nomdagi eng o'xshash so'zni topamiz
+        score = sum(max(difflib.SequenceMatcher(None, w, nw).ratio() for nw in name_words) for w in words) / len(words)
+        score = max(score, difflib.SequenceMatcher(None, q, name).ratio())
+        if score >= 0.75:
+            fuzzy.append((-score, name, r))
+    return [r for *_, r in sorted(fuzzy, key=lambda x: x[:2])], False
+
+
+@bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text and not m.text.startswith("/") and m.text not in MENU_BUTTONS)
+def product_search(message):
+    query = message.text.strip()
+    if len(query) < 2:
+        bot.send_message(message.chat.id, "🔎 Kamida 2 ta harf yozing.")
+        return
+    try:
+        rows = get_all_stock()
+    except requests.RequestException as e:
+        bot.send_message(message.chat.id, f"⚠️ MoySklad bilan bog'lanishda xato:\n<code>{esc(e)}</code>")
+        return
+    found, is_exact = find_products(query, rows)
+    if not found:
+        bot.send_message(message.chat.id, f"❌ <b>{esc(query)}</b> — topilmadi.")
+        return
+    title = "🔎 Natijalar" if is_exact else "🔎 Aniq topilmadi, o'xshash tovarlar"
+    txt = f"{title}: <b>{esc(query)}</b>\n\n"
+    for r in found[:20]:
+        name = r.get('name') or "Noma'lum"
+        txt += f"🔹 {esc(name)}\n    └ Qoldiq: <b>{r.get('stock', 0):,.0f}</b> ta\n"
+    if len(found) > 20:
+        txt += f"\n... va yana {len(found) - 20} ta. Aniqroq yozing."
+    send_long(message.chat.id, txt)
 
 
 if __name__ == "__main__":

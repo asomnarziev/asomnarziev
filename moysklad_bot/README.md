@@ -7,6 +7,7 @@ Kichik biznes uchun Telegram bot: MoySklad'dan hisobotlarni to'g'ridan-to'g'ri T
 - 📊 **Umumiy hisobot** — savdo, kassa kirim/chiqim, kassa balansi, foyda va sof foyda
 - 📦 **Sotuv tovarlar bo'yicha** — tanlangan davrda eng ko'p sotilgan tovarlar
 - 📁 **Tovar qoldiqlari** — papkalar bo'yicha qoldiq soni va qiymati (hozirgi yoki tanlangan sana bo'yicha)
+- 🔎 **Tovar qidirish** — chatga tovar nomi (yoki artikul/kodi) yozilsa, o'xshash tovarlar qoldig'i chiqadi; xato yozilgan nomlarni ham topadi, hech narsa bo'lmasa "topilmadi" deydi
 - 🔐 **Ruxsat tizimi** — yangi foydalanuvchi `/start` bosganda admin tasdiqlaydi yoki rad etadi
 
 ## O'rnatish
