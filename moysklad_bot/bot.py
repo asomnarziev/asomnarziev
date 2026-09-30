@@ -313,7 +313,8 @@ def generate_final_summary(chat_id, s, e, l):
     cashin_card = cur.total([r for r in applied_cashin if payment_type(r) == 'card'], 'sum')
     kassa_cash = cur.total(retail, 'cashSum') + cashin_cash
     kassa_card = cur.total(retail, 'noCashSum') + cashin_card
-    kassa_total = cur.total(retail, 'sum') + cashin_cash + cashin_card
+    # Qarz kassaga tushgan pul emas: u KASSA tagida ko'rsatiladi, lekin jamiga qo'shilmaydi (KASSA = naqd + karta)
+    kassa_total = kassa_cash + kassa_card
 
     # 4. Foyda = operatsion foyda (операционная прибыль): yalpi foyda - operatsion xarajatlar (kassa + bank to'lovlari)
     operating_p = gross_p - operating_expenses(cashout_rows + ms_rows("/entity/paymentout", period), cur)
