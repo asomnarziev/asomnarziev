@@ -6,7 +6,7 @@ Kichik biznes uchun Telegram bot: MoySklad'dan hisobotlarni to'g'ridan-to'g'ri T
 
 - 📊 **Umumiy hisobot** — savdo, kassa kirim/chiqim, chakana savdo (naqd, karta, qarz) — hammasi dollarda, MoySklad hujjatidagi kurs bo'yicha va foyda (MoySklad "Прибыли и убытки" dagi операционная прибыль)
 - 📅 **Davr tanlash** — tayyor davrlar (bugun, kecha, shu/o'tgan hafta, shu/o'tgan oy) yoki kalendarda boshlanish va tugash kunini bosish
-- 📦 **Sotuv tovarlar bo'yicha** — Top 50 / 100 / 150 eng ko'p sotilgan tovar (sotuv summasi bo'yicha), tayyor davr yoki kalendar
+- 📦 **Sotuv tovarlar bo'yicha** — Top 50 / 100 / 150 eng ko'p va eng kam sotilgan tovarlar (soni yoki summasi bo'yicha), tayyor davr yoki kalendar
 - 📁 **Tovar qoldiqlari** — papkalar bo'yicha qoldiq soni va qiymati (hozirgi yoki tanlangan sana bo'yicha)
 - 🔄 **Aylanma** — MoySklad "Обороты": davr boshidagi, kirim, chiqim va oxiridagi soni/summasi, bosh guruhlar bo'yicha; solishtirish: kunlik, haftalik, oylik (bir xil kunlar) yoki kalendardan ikki davr; oylar bo'yicha ko'rinish (3/6/12 oy yoki istalgan oraliq, soni va summasi)
 - 🔎 **Tovar qidirish** — chatga tovar nomi (yoki artikul/kodi) yozilsa, o'xshash tovarlar qoldig'i chiqadi; xato yozilgan nomlarni ham topadi, kirill va lotinda yozilganini farqlamaydi (холодильник = xolodilnik = holodilnik), hech narsa bo'lmasa "topilmadi" deydi

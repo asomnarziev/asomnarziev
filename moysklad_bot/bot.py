@@ -201,30 +201,44 @@ def process_reports(chat_id, s, e, l):
 
 
 def generate_product_sales_report(chat_id, s, e, l):
-    """Eng ko'p sotilgan tovarlar (sotuv summasi bo'yicha), tanlangan Top N ta."""
-    top_n = user_steps.get(chat_id, {}).get('top_n', TOP_SIZES[0])
-    res = [r for r in ms_rows("/report/profit/byvariant", {"momentFrom": s, "momentTo": e}) if r.get('sellSum', 0)]
+    """Eng ko'p va eng kam sotilgan tovarlar (soni yoki summasi bo'yicha), tanlangan Top N tadan."""
+    steps = user_steps.get(chat_id, {})
+    top_n, by = steps.get('top_n', TOP_SIZES[0]), steps.get('top_by', 's')
+    res = [r for r in ms_rows("/report/profit/byvariant", {"momentFrom": s, "momentTo": e})
+           if r.get('sellSum', 0) or r.get('sellQuantity', 0)]
     if not res:
         bot.send_message(chat_id, f"📦 <b>{l}</b> davrida sotuvlar topilmadi.")
         return
-    res.sort(key=lambda r: r.get('sellSum', 0), reverse=True)
+    qty = lambda r: r.get('sellQuantity', 0) or 0
+    total = lambda r: r.get('sellSum', 0) or 0
+    key = (lambda r: (qty(r), total(r))) if by == "q" else (lambda r: (total(r), qty(r)))
+    res.sort(key=key, reverse=True)
     top = res[:top_n]
+    bottom = list(reversed(res[top_n:][-top_n:]))  # eng kamlari, top ro'yxatiga kirmaganlar orasidan
     base = Currencies().base  # hisobot summalari asosiy valyutada
     money = lambda amount: fmt_money(amount, base)
-    total_sum = sum(r.get('sellSum', 0) for r in res) / 100
-    top_sum = sum(r.get('sellSum', 0) for r in top) / 100
-    top_qty = sum(r.get('sellQuantity', 0) or 0 for r in top)
-    share = f", umumiy savdoning {top_sum / total_sum * 100:.0f}%" if total_sum else ""
-    txt = (f"🏆 <b>TOP {top_n} SOTUV: {l}</b>\n<i>Sotuv summasi bo'yicha</i>\n━━━━━━━━━━━━━━━━━━━━\n"
-           f"Sotilgan tovar turlari: {len(res)} ta\n"
-           f"Top {len(top)} jami: <b>{fmt_qty(top_qty)} ta | {money(top_sum)}</b>{share}\n"
-           f"━━━━━━━━━━━━━━━━━━━━\n\n")
-    for i, r in enumerate(top, 1):
-        name = r.get('variantName') or r.get('name') or r.get('assortment', {}).get('name') or "Noma'lum tovar"
-        txt += f"<b>{i}.</b> {esc(name[:45])}\n      {fmt_qty(r.get('sellQuantity', 0) or 0)} ta | {money(r.get('sellSum', 0) / 100)}\n"
-    if len(res) > top_n:
-        txt += f"\n<i>... va yana {len(res) - top_n} ta tovar</i>"
-    send_long(chat_id, txt)
+    all_qty, all_sum = sum(map(qty, res)), sum(map(total, res)) / 100
+    sort_name = TOP_SORTS[by].split(" ", 1)[1].lower()
+
+    def listing(title, items):
+        items_qty, items_sum = sum(map(qty, items)), sum(map(total, items)) / 100
+        share_base, share_part = (all_qty, items_qty) if by == "q" else (all_sum, items_sum)
+        share = f", umumiy savdoning {share_part / share_base * 100:.0f}%" if share_base else ""
+        txt = (f"{title}: {l}</b>\n<i>{sort_name.capitalize()}</i>\n━━━━━━━━━━━━━━━━━━━━\n"
+               f"Jami: <b>{fmt_qty(items_qty)} ta | {money(items_sum)}</b>{share}\n━━━━━━━━━━━━━━━━━━━━\n\n")
+        for i, r in enumerate(items, 1):
+            name = r.get('variantName') or r.get('name') or r.get('assortment', {}).get('name') or "Noma'lum tovar"
+            txt += f"<b>{i}.</b> {esc(name[:45])}\n      {fmt_qty(qty(r))} ta | {money(total(r) / 100)}\n"
+        return txt
+
+    send_long(chat_id, f"📊 <b>{l}</b>: {len(res)} turdagi tovar sotilgan, jami "
+                       f"<b>{fmt_qty(all_qty)} ta | {money(all_sum)}</b>")
+    send_long(chat_id, listing(f"🏆 <b>ENG KO'P SOTILGAN TOP {len(top)}", top))
+    if bottom:
+        send_long(chat_id, listing(f"🐢 <b>ENG KAM SOTILGAN {len(bottom)} TA", bottom))
+    else:
+        bot.send_message(chat_id, f"<i>Sotilgan tovarlar {len(res)} ta — hammasi yuqoridagi ro'yxatda, "
+                                  f"eng kam sotilganlar ro'yxati alohida chiqmaydi.</i>")
 
 
 # MoySklad'ning "Прибыли и убытки" hisobotidagi kabi bu moddalar operatsion xarajat hisoblanmaydi
@@ -661,6 +675,7 @@ def calculate_folder_stock(call):
 
 
 TOP_SIZES = (50, 100, 150)
+TOP_SORTS = {"q": "🔢 Soni bo'yicha", "s": "💰 Summa bo'yicha"}
 
 
 def period_markup(report_type):
@@ -680,19 +695,24 @@ def sales_init(message):
     user_steps[message.chat.id] = {'report_type': message.text}
     if message.text == "📦 Sotuv Tovarlar Bo'yicha":
         # Avval nechta tovar ko'rsatilishi, keyin davr tanlanadi
+        btn = types.InlineKeyboardButton
         markup = types.InlineKeyboardMarkup()
-        markup.row(*[types.InlineKeyboardButton(f"🏆 Top {n}", callback_data=f"top:{n}") for n in TOP_SIZES])
-        bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nEng ko'p sotilgan nechta tovar ko'rsatilsin?",
-                         reply_markup=markup)
+        for by, title in TOP_SORTS.items():
+            markup.row(btn(title, callback_data="cal:x"))  # sarlavha, bosilmaydi
+            markup.row(*[btn(f"Top {n}", callback_data=f"top:{by}:{n}") for n in TOP_SIZES])
+        bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nQaysi bo'yicha tartiblab, nechta tovar ko'rsatilsin?\n"
+                         f"<i>Eng ko'p va eng kam sotilganlar alohida chiqadi</i>", reply_markup=markup)
         return
     bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nDavrni tanlang:", reply_markup=period_markup(message.text))
 
 
 def handle_top_choice(call):
     chat_id = call.message.chat.id
-    n = int(call.data[4:])
-    user_steps[chat_id].update({'report_type': "📦 Sotuv Tovarlar Bo'yicha", 'top_n': n})
-    bot.edit_message_text(f"<b>📦 Sotuv Tovarlar Bo'yicha — Top {n}</b>\n\nDavrni tanlang:", chat_id,
+    parts = call.data.split(":")
+    by, n = (parts[1], int(parts[2])) if len(parts) == 3 else ("s", int(parts[1]))  # eski "top:50" tugmalari
+    user_steps[chat_id].update({'report_type': "📦 Sotuv Tovarlar Bo'yicha", 'top_n': n, 'top_by': by})
+    bot.edit_message_text(f"<b>📦 Sotuv Tovarlar Bo'yicha — Top {n}, {TOP_SORTS[by].split(' ', 1)[1].lower()}</b>\n\n"
+                          f"Davrni tanlang:", chat_id,
                           call.message.message_id, reply_markup=period_markup(user_steps[chat_id]['report_type']))
 
 
