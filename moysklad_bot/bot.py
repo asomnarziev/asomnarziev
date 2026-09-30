@@ -233,6 +233,9 @@ def generate_product_sales_report(chat_id, s, e, l):
 
     send_long(chat_id, f"📊 <b>{l}</b>: {len(res)} turdagi tovar sotilgan, jami "
                        f"<b>{fmt_qty(all_qty)} ta | {money(all_sum)}</b>")
+    if not top_n:
+        send_long(chat_id, listing(f"📋 <b>BARCHA SOTILGAN TOVARLAR ({len(res)} ta)", res))
+        return
     send_long(chat_id, listing(f"🏆 <b>ENG KO'P SOTILGAN TOP {len(top)}", top))
     if bottom:
         send_long(chat_id, listing(f"🐢 <b>ENG KAM SOTILGAN {len(bottom)} TA", bottom))
@@ -699,9 +702,10 @@ def sales_init(message):
         markup = types.InlineKeyboardMarkup()
         for by, title in TOP_SORTS.items():
             markup.row(btn(title, callback_data="cal:x"))  # sarlavha, bosilmaydi
-            markup.row(*[btn(f"Top {n}", callback_data=f"top:{by}:{n}") for n in TOP_SIZES])
+            markup.row(*[btn(f"Top {n}", callback_data=f"top:{by}:{n}") for n in TOP_SIZES],
+                       btn("📋 Hammasi", callback_data=f"top:{by}:all"))
         bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nQaysi bo'yicha tartiblab, nechta tovar ko'rsatilsin?\n"
-                         f"<i>Eng ko'p va eng kam sotilganlar alohida chiqadi</i>", reply_markup=markup)
+                         f"<i>Top — eng ko'p va eng kam sotilganlar alohida chiqadi\n📋 Hammasi — davrda sotilgan barcha tovarlar</i>", reply_markup=markup)
         return
     bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nDavrni tanlang:", reply_markup=period_markup(message.text))
 
@@ -709,9 +713,11 @@ def sales_init(message):
 def handle_top_choice(call):
     chat_id = call.message.chat.id
     parts = call.data.split(":")
-    by, n = (parts[1], int(parts[2])) if len(parts) == 3 else ("s", int(parts[1]))  # eski "top:50" tugmalari
+    by, n = (parts[1], parts[2]) if len(parts) == 3 else ("s", parts[1])  # eski "top:50" tugmalari
+    n = 0 if n == "all" else int(n)  # 0 - hammasi
     user_steps[chat_id].update({'report_type': "📦 Sotuv Tovarlar Bo'yicha", 'top_n': n, 'top_by': by})
-    bot.edit_message_text(f"<b>📦 Sotuv Tovarlar Bo'yicha — Top {n}, {TOP_SORTS[by].split(' ', 1)[1].lower()}</b>\n\n"
+    what = f"Top {n}" if n else "Hammasi"
+    bot.edit_message_text(f"<b>📦 Sotuv Tovarlar Bo'yicha — {what}, {TOP_SORTS[by].split(' ', 1)[1].lower()}</b>\n\n"
                           f"Davrni tanlang:", chat_id,
                           call.message.message_id, reply_markup=period_markup(user_steps[chat_id]['report_type']))
 
