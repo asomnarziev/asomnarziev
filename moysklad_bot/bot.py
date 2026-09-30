@@ -209,14 +209,14 @@ NON_OPERATING_EXPENSE_ITEMS = {"закупка товаров", "возврат"
 def operating_expenses(payments):
     """Operatsion xarajatlar: o'tkazilgan (проведённые) chiqim to'lovlari, tovar xaridi, qaytarish,
     ko'chirish va soliqlardan tashqari."""
-    items = ms_rows("/entity/expenseitem", {"filter": "archived=true;archived=false"})
-    item_names = {i['id']: i.get('name', '').strip().lower() for i in items}
+    excluded_ids = {i['id'] for i in ms_rows("/entity/expenseitem")
+                    if i.get('name', '').strip().lower() in NON_OPERATING_EXPENSE_ITEMS}
     total = 0
     for r in payments:
         if not r.get('applicable', True):
             continue
         item_id = r.get('expenseItem', {}).get('meta', {}).get('href', '').split('/')[-1]
-        if item_names.get(item_id) not in NON_OPERATING_EXPENSE_ITEMS:
+        if item_id not in excluded_ids:
             total += r.get('sum', 0)
     return total / 100
 
