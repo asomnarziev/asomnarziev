@@ -5,6 +5,7 @@ Kichik biznes uchun Telegram bot: MoySklad'dan hisobotlarni to'g'ridan-to'g'ri T
 ## Imkoniyatlar
 
 - 📊 **Umumiy hisobot** — savdo, kassa kirim/chiqim, chakana savdo (naqd, karta, qarz) — hammasi dollarda, MoySklad hujjatidagi kurs bo'yicha va foyda (MoySklad "Прибыли и убытки" dagi операционная прибыль)
+- 📅 **Davr tanlash** — tayyor davrlar (bugun, kecha, shu/o'tgan hafta, shu/o'tgan oy) yoki kalendarda boshlanish va tugash kunini bosish
 - 📦 **Sotuv tovarlar bo'yicha** — tanlangan davrda eng ko'p sotilgan tovarlar
 - 📁 **Tovar qoldiqlari** — papkalar bo'yicha qoldiq soni va qiymati (hozirgi yoki tanlangan sana bo'yicha)
 - 🔎 **Tovar qidirish** — chatga tovar nomi (yoki artikul/kodi) yozilsa, o'xshash tovarlar qoldig'i chiqadi; xato yozilgan nomlarni ham topadi, kirill va lotinda yozilganini farqlamaydi (холодильник = xolodilnik = holodilnik), hech narsa bo'lmasa "topilmadi" deydi
@@ -28,5 +29,6 @@ python bot.py
 | `TELEGRAM_BOT_TOKEN` | [@BotFather](https://t.me/BotFather) bergan token |
 | `MOYSKLAD_TOKEN` | MoySklad API tokeni |
 | `ADMIN_ID` | Adminning Telegram ID raqami |
+| `TIMEZONE` | Ixtiyoriy, standart `Asia/Tashkent` — "Bugun"/"Kecha" shu vaqt bo'yicha |
 
 > ⚠️ Tokenlarni hech qachon kod ichiga yozmang va GitHub'ga yuklamang.

@@ -4,13 +4,14 @@ import html
 import math
 import time
 import difflib
+import calendar
 import datetime as dt
+from zoneinfo import ZoneInfo
 
 import requests
 import telebot
 from telebot import types
 from dotenv import load_dotenv
-from telegram_bot_calendar import DetailedTelegramCalendar
 
 # --- SOZLAMALAR ---
 # Tokenlar kodda emas, .env faylida saqlanadi (.env.example ga qarang)
@@ -18,6 +19,8 @@ load_dotenv()
 MOYSKLAD_TOKEN = os.environ["MOYSKLAD_TOKEN"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 MOYSKLAD_API = "https://api.moysklad.ru/api/remap/1.2"
+# "Bugun", "Kecha" shu vaqt zonasi bo'yicha hisoblanadi (server UTC da bo'lsa ham)
+TIMEZONE = ZoneInfo(os.environ.get("TIMEZONE", "Asia/Tashkent"))
 
 # --- ADMIN VA RUXSATLAR ---
 ADMIN_ID = int(os.environ["ADMIN_ID"])
@@ -154,43 +157,20 @@ def dispatch_callback(call):
     if uid not in ALLOWED_USERS: return
     if chat_id not in user_steps: user_steps[chat_id] = {}
 
-    if call.data in ["date_calendar", "fdate_calendar"]:
-        user_steps[chat_id]['cal_mode'] = 'stock' if call.data == "fdate_calendar" else 'sales'
-        calendar, step = DetailedTelegramCalendar(calendar_id=1).build()
-        bot.edit_message_text(f"📅 Sana tanlang: {step}", chat_id, call.message.message_id, reply_markup=calendar)
-
-    elif DetailedTelegramCalendar.func(calendar_id=1)(call):
-        res, key, step = DetailedTelegramCalendar(calendar_id=1).process(call.data)
-        if not res and key:
-            bot.edit_message_text(f"📅 Tanlang: {step}", chat_id, call.message.message_id, reply_markup=key)
-        elif res:
-            if user_steps[chat_id].get('cal_mode') == 'stock':
-                user_steps[chat_id].update({'moment': res.strftime("%Y-%m-%d 23:59:59"), 'label': res.strftime("%d.%m.%Y")})
-                show_stock_folders(chat_id, message_id=call.message.message_id)
-            else:
-                user_steps[chat_id]['start_date'] = res
-                calendar, step = DetailedTelegramCalendar(calendar_id=2).build()
-                bot.edit_message_text(f"✅ Boshlanish: {res.strftime('%d.%m.%Y')}\n📅 Tugashni tanlang:", chat_id, call.message.message_id, reply_markup=calendar)
-
-    elif DetailedTelegramCalendar.func(calendar_id=2)(call):
-        res, key, step = DetailedTelegramCalendar(calendar_id=2).process(call.data)
-        if not res and key:
-            bot.edit_message_text(f"📅 Tanlang: {step}", chat_id, call.message.message_id, reply_markup=key)
-        elif res:
-            s_dt = user_steps[chat_id].get('start_date')
-            if not s_dt:
-                # Bot qayta ishga tushgan bo'lsa, boshlanish sanasi yo'qolgan bo'ladi
-                bot.send_message(chat_id, "⚠️ Boshlanish sanasi topilmadi, hisobotni qaytadan tanlang.")
-                return
-            process_reports(chat_id, s_dt.strftime("%Y-%m-%d 00:00:00"), res.strftime("%Y-%m-%d 23:59:59"), f"{s_dt.strftime('%d.%m.%Y')} - {res.strftime('%d.%m.%Y')}")
-
+    if call.data.startswith("cal:"): handle_calendar(call)
+    elif call.data.startswith("pr:"): handle_preset(call)
+    # Eski xabarlardagi tugmalar ham ishlashi uchun
+    elif call.data in ("date_today", "date_yesterday"):
+        call.data = "pr:" + call.data[5:]
+        handle_preset(call)
+    elif call.data == "date_calendar": open_calendar(call, 'r')
+    elif call.data == "fdate_calendar": open_calendar(call, 's')
     elif call.data == "fdate_now":
         user_steps[chat_id].update({'moment': None, 'label': "Hozirgi"})
         show_stock_folders(chat_id, message_id=call.message.message_id)
     elif call.data == "back_root": show_stock_folders(chat_id, None, call.message.message_id)
     elif call.data.startswith('nav_'): show_stock_folders(chat_id, call.data.split('_')[1], call.message.message_id)
     elif call.data.startswith('fcalc_'): calculate_folder_stock(call)
-    elif call.data.startswith('date_'): handle_quick_dates(call)
 
 
 # --- HISOBOTLAR ---
@@ -396,11 +376,13 @@ def calculate_folder_stock(call):
 @bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text in ["📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha"])
 def sales_init(message):
     user_steps[message.chat.id] = {'report_type': message.text}
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(types.InlineKeyboardButton("Bugun", callback_data="date_today"),
-               types.InlineKeyboardButton("Kecha", callback_data="date_yesterday"),
-               types.InlineKeyboardButton("📅 Kalendar", callback_data="date_calendar"))
-    bot.send_message(message.chat.id, f"{message.text} davrini tanlang:", reply_markup=markup)
+    btn = types.InlineKeyboardButton
+    markup = types.InlineKeyboardMarkup()
+    markup.row(btn("Bugun", callback_data="pr:today"), btn("Kecha", callback_data="pr:yesterday"))
+    markup.row(btn("Shu hafta", callback_data="pr:week"), btn("O'tgan hafta", callback_data="pr:lastweek"))
+    markup.row(btn("Shu oy", callback_data="pr:month"), btn("O'tgan oy", callback_data="pr:lastmonth"))
+    markup.row(btn("📅 Kalendardan tanlash", callback_data="cal:o:r"))
+    bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nDavrni tanlang:", reply_markup=markup)
 
 
 @bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text == "📁 Tovar Qoldiqlari")
@@ -408,18 +390,138 @@ def stock_report_init(message):
     user_steps[message.chat.id] = {'report_type': 'stock'}
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("Hozirgi holat", callback_data="fdate_now"),
-               types.InlineKeyboardButton("📅 Sana tanlash", callback_data="fdate_calendar"))
+               types.InlineKeyboardButton("📅 Sana tanlash", callback_data="cal:o:s"))
     bot.send_message(message.chat.id, "Vaqtni tanlang:", reply_markup=markup)
 
 
-def handle_quick_dates(call):
-    now = dt.datetime.now()
-    if "today" in call.data:
-        s, e, l = now.strftime("%Y-%m-%d 00:00:00"), now.strftime("%Y-%m-%d 23:59:59"), "BUGUN"
+# --- KALENDAR ---
+UZ_MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
+             "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"]
+UZ_WEEKDAYS = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"]
+
+
+def today():
+    return dt.datetime.now(TIMEZONE).date()
+
+
+def fmt_period(start, end):
+    return f"{start:%d.%m.%Y}" if start == end else f"{start:%d.%m.%Y} — {end:%d.%m.%Y}"
+
+
+def run_period(chat_id, start, end, name=None):
+    label = f"{name} ({fmt_period(start, end)})" if name else fmt_period(start, end)
+    process_reports(chat_id, f"{start:%Y-%m-%d} 00:00:00", f"{end:%Y-%m-%d} 23:59:59", label)
+
+
+def preset_range(key, t):
+    """Tayyor davrlar: (boshlanish, tugash, nomi)."""
+    month_start = t.replace(day=1)
+    week_start = t - dt.timedelta(days=t.weekday())
+    if key == "today":
+        return t, t, "BUGUN"
+    if key == "yesterday":
+        y = t - dt.timedelta(days=1)
+        return y, y, "KECHA"
+    if key == "week":
+        return week_start, t, "SHU HAFTA"
+    if key == "lastweek":
+        return week_start - dt.timedelta(days=7), week_start - dt.timedelta(days=1), "O'TGAN HAFTA"
+    if key == "month":
+        return month_start, t, "SHU OY"
+    if key == "lastmonth":
+        last_end = month_start - dt.timedelta(days=1)
+        return last_end.replace(day=1), last_end, "O'TGAN OY"
+    return None
+
+
+def handle_preset(call):
+    period = preset_range(call.data[3:], today())
+    if period:
+        run_period(call.message.chat.id, *period)
+
+
+def calendar_text(mode, start=None):
+    if mode == 's':
+        return "📅 <b>Qoldiq sanasini tanlang</b>"
+    if not start:
+        return "📅 <b>Davrni tanlang</b>\n\n1️⃣ Boshlanish kunini bosing"
+    return (f"📅 <b>Davrni tanlang</b>\n\n✅ Boshlanish: <b>{start:%d.%m.%Y}</b>\n"
+            f"2️⃣ Tugash kunini bosing\n<i>Bir kunlik hisobot uchun shu kunni yana bir marta bosing</i>")
+
+
+def build_calendar(year, month, mode, start=None):
+    """Oy kunlari jadvali. mode: 'r' - davr (2 ta sana), 's' - bitta sana."""
+    btn = types.InlineKeyboardButton
+    t = today()
+    noop = "cal:x"
+    prev_y, prev_m = (year - 1, 12) if month == 1 else (year, month - 1)
+    next_y, next_m = (year + 1, 1) if month == 12 else (year, month + 1)
+    has_next = (next_y, next_m) <= (t.year, t.month)
+    markup = types.InlineKeyboardMarkup()
+    markup.row(btn("◀️", callback_data=f"cal:n:{mode}:{prev_y}-{prev_m:02d}"),
+               btn(f"{UZ_MONTHS[month - 1]} {year}", callback_data=noop),
+               btn("▶️" if has_next else " ", callback_data=f"cal:n:{mode}:{next_y}-{next_m:02d}" if has_next else noop))
+    markup.row(*[btn(w, callback_data=noop) for w in UZ_WEEKDAYS])
+    for week in calendar.Calendar(firstweekday=0).monthdatescalendar(year, month):
+        row = []
+        for d in week:
+            if d.month != month:
+                row.append(btn(" ", callback_data=noop))
+            elif d > t:
+                row.append(btn("·", callback_data=noop))  # kelajak kunlari tanlanmaydi
+            else:
+                text = f"✅{d.day}" if d == start else (f"•{d.day}•" if d == t else str(d.day))
+                row.append(btn(text, callback_data=f"cal:d:{mode}:{d.isoformat()}"))
+        markup.row(*row)
+    bottom = [btn("❌ Bekor qilish", callback_data="cal:c")]
+    if (year, month) != (t.year, t.month):
+        bottom.insert(0, btn("↩️ Joriy oy", callback_data=f"cal:n:{mode}:{t.year}-{t.month:02d}"))
+    markup.row(*bottom)
+    return markup
+
+
+def open_calendar(call, mode):
+    chat_id = call.message.chat.id
+    user_steps[chat_id].pop('range_start', None)
+    t = today()
+    bot.edit_message_text(calendar_text(mode), chat_id, call.message.message_id,
+                          reply_markup=build_calendar(t.year, t.month, mode))
+
+
+def handle_calendar(call):
+    chat_id, msg_id = call.message.chat.id, call.message.message_id
+    parts = call.data.split(":")
+    action = parts[1]
+    if action == "x":
+        return
+    if action == "c":
+        user_steps[chat_id].pop('range_start', None)
+        bot.edit_message_text("❌ Bekor qilindi.", chat_id, msg_id)
+        return
+    if action == "o":
+        open_calendar(call, parts[2])
+        return
+    mode = parts[2]
+    start = user_steps[chat_id].get('range_start') if mode == 'r' else None
+    if action == "n":
+        year, month = map(int, parts[3].split("-"))
+        bot.edit_message_text(calendar_text(mode, start), chat_id, msg_id, reply_markup=build_calendar(year, month, mode, start))
+        return
+    if action != "d":
+        return
+    picked = dt.date.fromisoformat(parts[3])
+    if mode == 's':
+        user_steps[chat_id].update({'moment': f"{picked:%Y-%m-%d} 23:59:59", 'label': f"{picked:%d.%m.%Y}"})
+        show_stock_folders(chat_id, message_id=msg_id)
+    elif not start:
+        user_steps[chat_id]['range_start'] = picked
+        bot.edit_message_text(calendar_text(mode, picked), chat_id, msg_id,
+                              reply_markup=build_calendar(picked.year, picked.month, mode, picked))
     else:
-        y = now - dt.timedelta(days=1)
-        s, e, l = y.strftime("%Y-%m-%d 00:00:00"), y.strftime("%Y-%m-%d 23:59:59"), "KECHA"
-    process_reports(call.message.chat.id, s, e, l)
+        user_steps[chat_id].pop('range_start', None)
+        start, end = sorted((start, picked))
+        bot.edit_message_text(f"📅 Davr: <b>{fmt_period(start, end)}</b>", chat_id, msg_id)
+        run_period(chat_id, start, end)
 
 
 # --- TOVAR QIDIRISH ---
