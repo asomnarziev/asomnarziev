@@ -250,20 +250,32 @@ def generate_final_summary(chat_id, s, e, l):
     cashout_rows = ms_rows("/entity/cashout", period)
     total_cashout = sum(r.get('sum', 0) for r in cashout_rows) / 100
 
-    # 3. Kassa Balansi (Faqat kassa orderlari farqi)
-    kassa_balance = total_cashin - total_cashout
+    # 3. Kassa (real) = o'tkazilgan chakana savdolar (розничные продажи), to'lov usullari bo'yicha
+    retail = [r for r in ms_rows("/entity/retaildemand", period) if r.get('applicable', True)]
+    retail_total = sum(r.get('sum', 0) for r in retail) / 100
+    retail_cash = sum(r.get('cashSum', 0) for r in retail) / 100
+    retail_card = sum(r.get('noCashSum', 0) for r in retail) / 100
+    retail_qr = sum(r.get('qrSum', 0) for r in retail) / 100
+    retail_advance = sum(r.get('prepaymentCashSum', 0) + r.get('prepaymentNoCashSum', 0) + r.get('prepaymentQrSum', 0)
+                         for r in retail) / 100
 
-    # 4. Operatsion foyda (операционная прибыль) = yalpi foyda - operatsion xarajatlar (kassa + bank to'lovlari)
+    # 4. Foyda = operatsion foyda (операционная прибыль): yalpi foyda - operatsion xarajatlar (kassa + bank to'lovlari)
     operating_p = gross_p - operating_expenses(cashout_rows + ms_rows("/entity/paymentout", period))
 
+    # QR orqali to'lov bo'lmasa, qatori ko'rsatilmaydi
+    qr_line = f"    ├ 📱 QR: ${retail_qr:,.2f}\n" if retail_qr else ""
     report = (f"🗓 <b>UMUMIY HISOBOT: {l}</b>\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
               f"💰 SAVDO (Umumiy): ${total_s:,.2f}\n"
               f"📥 KIRIM PULLAR: ${total_cashin:,.2f}\n"
               f"📉 RASXODLAR: ${total_cashout:,.2f}\n"
-              f"🏦 <b>KASSA (REAL): ${kassa_balance:,.2f}</b>\n"
+              f"🏦 <b>KASSA (REAL): ${retail_total:,.2f}</b>\n"
+              f"    ├ 💵 Naqd: ${retail_cash:,.2f}\n"
+              f"    ├ 💳 Karta: ${retail_card:,.2f}\n"
+              f"{qr_line}"
+              f"    └ 🔄 Iz avansa: ${retail_advance:,.2f}\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
-              f"💸 <b>OPERATSION FOYDA: ${operating_p:,.2f}</b>")
+              f"💸 <b>FOYDA: ${operating_p:,.2f}</b>")
 
     bot.send_message(chat_id, report)
 
