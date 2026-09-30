@@ -88,12 +88,14 @@ def ms_rows(path, params=None):
 def send_long(chat_id, text, reply_markup=None):
     """Telegram 4096 belgidan uzun xabarni qabul qilmaydi - qatorlar bo'yicha bo'lib yuboramiz.
     Tugmalar (reply_markup) oxirgi qismga qo'shiladi."""
-    chunk = ""
+    chunk, in_pre = "", False
     for line in text.split("\n"):
-        if len(chunk) + len(line) + 1 > 4000:
+        # <pre> jadvalni o'rtasidan bo'lmaymiz, aks holda HTML buziladi
+        if not in_pre and len(chunk) + len(line) + 1 > 3500:
             bot.send_message(chat_id, chunk)
             chunk = ""
         chunk += line + "\n"
+        in_pre = (in_pre or "<pre>" in line) and "</pre>" not in line
     if chunk.strip():
         bot.send_message(chat_id, chunk, reply_markup=reply_markup)
 
@@ -172,6 +174,8 @@ def dispatch_callback(call):
     elif call.data == "back_root": show_stock_folders(chat_id, None, call.message.message_id)
     elif call.data.startswith('nav_'): show_stock_folders(chat_id, call.data.split('_')[1], call.message.message_id)
     elif call.data.startswith('fcalc_'): calculate_folder_stock(call)
+    elif call.data == 'cmpmenu': show_compare_menu(call)
+    elif call.data.startswith('cp:'): handle_compare_preset(call)
     elif call.data.startswith('cmp:'):
         # Tayyor aylanma hisoboti tagidagi tugma: 1-davr shu hisobot davri, 2-davr kalendardan
         _, d1, d2 = call.data.split(':')
@@ -408,39 +412,101 @@ def generate_turnover_report(chat_id, s, e, l):
     send_long(chat_id, txt, reply_markup=markup)
 
 
-def fmt_change(old, new):
-    if not old:
-        return "🆕" if new else "="
-    pct = (new - old) / abs(old) * 100
+def show_compare_menu(call):
+    user_steps[call.message.chat.id]['report_type'] = "🔄 Aylanma"
+    btn = types.InlineKeyboardButton
+    markup = types.InlineKeyboardMarkup()
+    markup.row(btn("📅 Kunlik: Bugun ↔ Kecha", callback_data="cp:day"))
+    markup.row(btn("📅 Haftalik: Shu hafta ↔ O'tgan hafta", callback_data="cp:week"))
+    markup.row(btn("📅 Oylik: Shu oy ↔ O'tgan oy", callback_data="cp:month"))
+    markup.row(btn("🗓 Kalendardan ikki davr tanlash", callback_data="cal:o:a"))
+    bot.edit_message_text("🆚 <b>Aylanmani solishtirish</b>\n\nNimani nima bilan solishtiramiz?",
+                          call.message.chat.id, call.message.message_id, reply_markup=markup)
+
+
+def compare_preset(key, t):
+    """(eski davr, yangi davr, ustun nomlari, sarlavha, izoh). Hafta/oy uchun bir xil kunlar olinadi."""
+    if key == "day":
+        y = t - dt.timedelta(days=1)
+        return (y, y), (t, t), ("Kecha", "Bugun"), "BUGUN ↔ KECHA", None
+    if key == "week":
+        ws = t - dt.timedelta(days=t.weekday())
+        last_ws = ws - dt.timedelta(days=7)
+        note = f"Haftaning bir xil kunlari: {UZ_WEEKDAYS[0]}–{UZ_WEEKDAYS[t.weekday()]}" if t.weekday() else "Haftaning birinchi kuni (Du)"
+        return (last_ws, last_ws + (t - ws)), (ws, t), ("O'tgan h.", "Shu hafta"), "SHU HAFTA ↔ O'TGAN HAFTA", note
+    if key == "month":
+        ms = t.replace(day=1)
+        prev_end = ms - dt.timedelta(days=1)
+        prev = (prev_end.replace(day=1), prev_end.replace(day=min(t.day, prev_end.day)))
+        return (prev, (ms, t), (UZ_MONTHS[prev_end.month - 1], UZ_MONTHS[t.month - 1]),
+                "SHU OY ↔ O'TGAN OY", f"Oyning bir xil kunlari: 1–{t.day}")
+    return None
+
+
+def handle_compare_preset(call):
+    preset = compare_preset(call.data[3:], today())
+    if preset:
+        p_old, p_new, names, title, note = preset
+        bot.edit_message_text(f"🆚 <b>{title}</b>", call.message.chat.id, call.message.message_id)
+        compare_turnover(call.message.chat.id, p_old, p_new, names, title, note)
+
+
+def pct_change(old, new):
+    return None if not old else (new - old) / abs(old) * 100
+
+
+def trend_text(old, new):
+    pct = pct_change(old, new)
+    if pct is None:
+        return "🆕 yangi" if new else "o'zgarmadi"
     if abs(pct) < 0.05:
-        return "="
-    return f"{'🔺' if pct > 0 else '🔻'}{pct:+.1f}%"
+        return "o'zgarmadi"
+    return f"🔺 {pct:.1f}% ko'p" if pct > 0 else f"🔻 {abs(pct):.1f}% kam"
 
 
-def compare_turnover(chat_id, p1, p2):
-    """Ikki davr aylanmasini bosh guruhlar bo'yicha solishtiradi."""
+def compare_turnover(chat_id, p1, p2, names=("1-davr", "2-davr"), title="IKKI DAVR", note=None):
+    """Ikki davr aylanmasini bosh guruhlar bo'yicha solishtiradi. p1 - chap ustun, p2 - o'ng ustun."""
     bot.send_message(chat_id, "⏳ Solishtirilmoqda...")
     g1, t1, _ = turnover_by_group(f"{p1[0]:%Y-%m-%d} 00:00:00", f"{p1[1]:%Y-%m-%d} 23:59:59")
     g2, t2, _ = turnover_by_group(f"{p2[0]:%Y-%m-%d} 00:00:00", f"{p2[1]:%Y-%m-%d} 23:59:59")
     base = Currencies().base
     money = lambda amount: fmt_money(amount, base)
+    unit = "$" if base == "USD" else base[:2]
     zero = {key: (0, 0) for key, _ in TURNOVER_PARTS}
+    short = {"onPeriodStart": "Boshida", "income": "Prixod", "outcome": "Rasxod", "onPeriodEnd": "Yakuni"}
 
-    def block(title, a, b):
-        lines = f"📁 <b>{esc(title)}</b>\n"
-        for key, name in TURNOVER_PARTS:
+    def table(a, b):
+        """Telefonda sig'adigan jadval: har ko'rsatkich uchun soni (ta) va summa ($) qatori."""
+        rows = [f"{'':<10}{names[0][:9]:>9}{names[1][:9]:>9}{'Farq':>6}"]
+        for key, _ in TURNOVER_PARTS:
             (qa, sa), (qb, sb) = a[key], b[key]
-            lines += (f"    {name}: {fmt_change(sa, sb)}\n"
-                      f"        {fmt_qty(qa)} → <b>{fmt_qty(qb)}</b> ta | {money(sa)} → <b>{money(sb)}</b>\n")
-        return lines
+            dq = qb - qa
+            pct = pct_change(sa, sb)
+            if pct is None:
+                dp = "yangi" if sb else "0%"
+            else:
+                dp = "0%" if round(pct) == 0 else f"{pct:+.0f}%"
+            dq_text = (("+" if dq > 0 else "") + fmt_qty(dq)) if dq else "0"
+            rows.append(f"{short[key]:<8}ta{fmt_qty(qa):>9}{fmt_qty(qb):>9}{dq_text:>6}")
+            rows.append(f"{'':<8}{unit:<2}{sa:>9,.0f}{sb:>9,.0f}{dp:>6}")
+        return "<pre>" + esc("\n".join(rows)) + "</pre>"
 
-    names = group_order(set(g1) | set(g2))
-    txt = (f"🆚 <b>AYLANMA SOLISHTIRISH</b>\n"
-           f"1️⃣ {fmt_period(*p1)}\n2️⃣ {fmt_period(*p2)}\n"
-           f"<i>Har qatorda: 1-davr → 2-davr, foiz summa bo'yicha</i>\n━━━━━━━━━━━━━━━━━━━━\n")
-    txt += "\n".join(block(g, g1.get(g, zero), g2.get(g, zero)) for g in names)
-    if len(names) > 1:
-        txt += "━━━━━━━━━━━━━━━━━━━━\n" + block("JAMI", t1, t2)
+    group_names = group_order(set(g1) | set(g2))
+    txt = (f"🆚 <b>AYLANMA: {title}</b>\n"
+           f"◀️ {names[0]}: {fmt_period(*p1)}\n"
+           f"▶️ {names[1]}: {fmt_period(*p2)}\n")
+    if note:
+        txt += f"<i>{note}</i>\n"
+    txt += (f"━━━━━━━━━━━━━━━━━━━━\n<b>Qisqacha ({names[1]}, {names[0]}ga nisbatan):</b>\n"
+            f"📤 Rasxod: {money(t1['outcome'][1])} → <b>{money(t2['outcome'][1])}</b> ({trend_text(t1['outcome'][1], t2['outcome'][1])})\n"
+            f"📥 Prixod: {money(t1['income'][1])} → <b>{money(t2['income'][1])}</b> ({trend_text(t1['income'][1], t2['income'][1])})\n"
+            f"📦 Yakuniy qoldiq: {money(t1['onPeriodEnd'][1])} → <b>{money(t2['onPeriodEnd'][1])}</b> "
+            f"({trend_text(t1['onPeriodEnd'][1], t2['onPeriodEnd'][1])})\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<i>Boshida — davr boshidagi qoldiq, Yakuni — davr oxiridagi qoldiq. Farq: soni bo'yicha dona, summa bo'yicha foiz.</i>\n\n")
+    txt += "\n".join(f"📁 <b>{esc(g)}</b>\n{table(g1.get(g, zero), g2.get(g, zero))}" for g in group_names)
+    if len(group_names) > 1:
+        txt += f"\n📊 <b>JAMI</b>\n{table(t1, t2)}"
     send_long(chat_id, txt)
 
 
@@ -494,7 +560,7 @@ def sales_init(message):
     markup.row(btn("Shu oy", callback_data="pr:month"), btn("O'tgan oy", callback_data="pr:lastmonth"))
     markup.row(btn("📅 Kalendardan tanlash", callback_data="cal:o:r"))
     if message.text == "🔄 Aylanma":
-        markup.row(btn("🆚 Ikki davrni solishtirish", callback_data="cal:o:a"))
+        markup.row(btn("🆚 Solishtirish", callback_data="cmpmenu"))
     bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nDavrni tanlang:", reply_markup=markup)
 
 
