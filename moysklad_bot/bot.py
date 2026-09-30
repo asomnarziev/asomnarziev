@@ -85,8 +85,9 @@ def ms_rows(path, params=None):
             return rows
 
 
-def send_long(chat_id, text):
-    """Telegram 4096 belgidan uzun xabarni qabul qilmaydi - qatorlar bo'yicha bo'lib yuboramiz."""
+def send_long(chat_id, text, reply_markup=None):
+    """Telegram 4096 belgidan uzun xabarni qabul qilmaydi - qatorlar bo'yicha bo'lib yuboramiz.
+    Tugmalar (reply_markup) oxirgi qismga qo'shiladi."""
     chunk = ""
     for line in text.split("\n"):
         if len(chunk) + len(line) + 1 > 4000:
@@ -94,7 +95,7 @@ def send_long(chat_id, text):
             chunk = ""
         chunk += line + "\n"
     if chunk.strip():
-        bot.send_message(chat_id, chunk)
+        bot.send_message(chat_id, chunk, reply_markup=reply_markup)
 
 
 # --- ASOSIY MENYU ---
@@ -171,6 +172,11 @@ def dispatch_callback(call):
     elif call.data == "back_root": show_stock_folders(chat_id, None, call.message.message_id)
     elif call.data.startswith('nav_'): show_stock_folders(chat_id, call.data.split('_')[1], call.message.message_id)
     elif call.data.startswith('fcalc_'): calculate_folder_stock(call)
+    elif call.data.startswith('cmp:'):
+        # Tayyor aylanma hisoboti tagidagi tugma: 1-davr shu hisobot davri, 2-davr kalendardan
+        _, d1, d2 = call.data.split(':')
+        user_steps[chat_id]['cmp_first'] = (dt.date.fromisoformat(d1), dt.date.fromisoformat(d2))
+        open_calendar(call, 'c', new_message=True)
 
 
 # --- HISOBOTLAR ---
@@ -364,31 +370,77 @@ def root_group_name(assortment, folders):
     return folders[folder_id].get('name') or NO_GROUP
 
 
-def generate_turnover_report(chat_id, s, e, l):
-    """MoySklad "Обороты" hisoboti bosh guruhlar bo'yicha: davr boshida, prixod, rasxod, davr yakuni (soni va summasi)."""
+def turnover_by_group(s, e):
+    """{bosh guruh: jami}, umumiy jami va tovarlar soni."""
     rows = ms_rows("/report/turnover/all", {"momentFrom": s, "momentTo": e})
-    if not rows:
-        bot.send_message(chat_id, f"🔄 <b>{l}</b> davrida tovar harakati topilmadi.")
-        return
-    folders = {f['id']: f for f in ms_rows("/entity/productfolder")}
+    folders = {f['id']: f for f in ms_rows("/entity/productfolder")} if rows else {}
     groups = {}
     for r in rows:
         groups.setdefault(root_group_name(r.get('assortment', {}), folders), []).append(r)
+    return {g: turnover_totals(rs) for g, rs in groups.items()}, turnover_totals(rows), len(rows)
+
+
+def group_order(names):
+    return sorted(names, key=lambda g: (g == NO_GROUP, g.lower()))
+
+
+def generate_turnover_report(chat_id, s, e, l):
+    """MoySklad "Обороты" hisoboti bosh guruhlar bo'yicha: davr boshida, prixod, rasxod, davr yakuni (soni va summasi)."""
+    groups, all_totals, count = turnover_by_group(s, e)
+    if not count:
+        bot.send_message(chat_id, f"🔄 <b>{l}</b> davrida tovar harakati topilmadi.")
+        return
     base = Currencies().base  # hisobot summalari asosiy valyutada
 
-    def block(title, group_rows):
-        totals = turnover_totals(group_rows)
+    def block(title, totals):
         lines = f"📁 <b>{esc(title)}</b>\n"
         for key, name in TURNOVER_PARTS:
             qty, total = totals[key]
             lines += f"    {name}: <b>{fmt_qty(qty)}</b> ta | {fmt_money(total, base)}\n"
         return lines
 
-    order = sorted(groups, key=lambda g: (g == NO_GROUP, g.lower()))
     txt = f"🔄 <b>AYLANMA: {l}</b>\n━━━━━━━━━━━━━━━━━━━━\n"
-    txt += "\n".join(block(g, groups[g]) for g in order)
+    txt += "\n".join(block(g, groups[g]) for g in group_order(groups))
     if len(groups) > 1:
-        txt += "━━━━━━━━━━━━━━━━━━━━\n" + block("JAMI", rows)
+        txt += "━━━━━━━━━━━━━━━━━━━━\n" + block("JAMI", all_totals)
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🆚 Boshqa davr bilan solishtirish", callback_data=f"cmp:{s[:10]}:{e[:10]}"))
+    send_long(chat_id, txt, reply_markup=markup)
+
+
+def fmt_change(old, new):
+    if not old:
+        return "🆕" if new else "="
+    pct = (new - old) / abs(old) * 100
+    if abs(pct) < 0.05:
+        return "="
+    return f"{'🔺' if pct > 0 else '🔻'}{pct:+.1f}%"
+
+
+def compare_turnover(chat_id, p1, p2):
+    """Ikki davr aylanmasini bosh guruhlar bo'yicha solishtiradi."""
+    bot.send_message(chat_id, "⏳ Solishtirilmoqda...")
+    g1, t1, _ = turnover_by_group(f"{p1[0]:%Y-%m-%d} 00:00:00", f"{p1[1]:%Y-%m-%d} 23:59:59")
+    g2, t2, _ = turnover_by_group(f"{p2[0]:%Y-%m-%d} 00:00:00", f"{p2[1]:%Y-%m-%d} 23:59:59")
+    base = Currencies().base
+    money = lambda amount: fmt_money(amount, base)
+    zero = {key: (0, 0) for key, _ in TURNOVER_PARTS}
+
+    def block(title, a, b):
+        lines = f"📁 <b>{esc(title)}</b>\n"
+        for key, name in TURNOVER_PARTS:
+            (qa, sa), (qb, sb) = a[key], b[key]
+            lines += (f"    {name}: {fmt_change(sa, sb)}\n"
+                      f"        {fmt_qty(qa)} → <b>{fmt_qty(qb)}</b> ta | {money(sa)} → <b>{money(sb)}</b>\n")
+        return lines
+
+    names = group_order(set(g1) | set(g2))
+    txt = (f"🆚 <b>AYLANMA SOLISHTIRISH</b>\n"
+           f"1️⃣ {fmt_period(*p1)}\n2️⃣ {fmt_period(*p2)}\n"
+           f"<i>Har qatorda: 1-davr → 2-davr, foiz summa bo'yicha</i>\n━━━━━━━━━━━━━━━━━━━━\n")
+    txt += "\n".join(block(g, g1.get(g, zero), g2.get(g, zero)) for g in names)
+    if len(names) > 1:
+        txt += "━━━━━━━━━━━━━━━━━━━━\n" + block("JAMI", t1, t2)
     send_long(chat_id, txt)
 
 
@@ -441,6 +493,8 @@ def sales_init(message):
     markup.row(btn("Shu hafta", callback_data="pr:week"), btn("O'tgan hafta", callback_data="pr:lastweek"))
     markup.row(btn("Shu oy", callback_data="pr:month"), btn("O'tgan oy", callback_data="pr:lastmonth"))
     markup.row(btn("📅 Kalendardan tanlash", callback_data="cal:o:r"))
+    if message.text == "🔄 Aylanma":
+        markup.row(btn("🆚 Ikki davrni solishtirish", callback_data="cal:o:a"))
     bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nDavrni tanlang:", reply_markup=markup)
 
 
@@ -499,13 +553,17 @@ def handle_preset(call):
         run_period(call.message.chat.id, *period)
 
 
-def calendar_text(mode, start=None):
+def calendar_text(mode, start=None, first=None):
+    """mode: 'r' - hisobot davri, 's' - qoldiq sanasi, 'a'/'c' - solishtirish uchun 1-/2-davr."""
     if mode == 's':
         return "📅 <b>Qoldiq sanasini tanlang</b>"
+    title = {"a": "🆚 <b>1-davrni tanlang</b>",
+             "c": f"🆚 <b>2-davrni tanlang</b>\n1-davr: {fmt_period(*first)}" if first else "🆚 <b>2-davrni tanlang</b>"
+             }.get(mode, "📅 <b>Davrni tanlang</b>")
     if not start:
-        return "📅 <b>Davrni tanlang</b>\n\n1️⃣ Boshlanish kunini bosing"
-    return (f"📅 <b>Davrni tanlang</b>\n\n✅ Boshlanish: <b>{start:%d.%m.%Y}</b>\n"
-            f"2️⃣ Tugash kunini bosing\n<i>Bir kunlik hisobot uchun shu kunni yana bir marta bosing</i>")
+        return f"{title}\n\n▶️ Boshlanish kunini bosing"
+    return (f"{title}\n\n✅ Boshlanish: <b>{start:%d.%m.%Y}</b>\n"
+            f"⏹ Tugash kunini bosing\n<i>Bir kunlik davr uchun shu kunni yana bir marta bosing</i>")
 
 
 def build_calendar(year, month, mode, start=None):
@@ -539,12 +597,16 @@ def build_calendar(year, month, mode, start=None):
     return markup
 
 
-def open_calendar(call, mode):
+def open_calendar(call, mode, new_message=False):
     chat_id = call.message.chat.id
     user_steps[chat_id].pop('range_start', None)
     t = today()
-    bot.edit_message_text(calendar_text(mode), chat_id, call.message.message_id,
-                          reply_markup=build_calendar(t.year, t.month, mode))
+    text = calendar_text(mode, first=user_steps[chat_id].get('cmp_first'))
+    markup = build_calendar(t.year, t.month, mode)
+    if new_message:
+        bot.send_message(chat_id, text, reply_markup=markup)
+    else:
+        bot.edit_message_text(text, chat_id, call.message.message_id, reply_markup=markup)
 
 
 def handle_calendar(call):
@@ -555,16 +617,22 @@ def handle_calendar(call):
         return
     if action == "c":
         user_steps[chat_id].pop('range_start', None)
+        user_steps[chat_id].pop('cmp_first', None)
         bot.edit_message_text("❌ Bekor qilindi.", chat_id, msg_id)
         return
     if action == "o":
+        user_steps[chat_id].pop('cmp_first', None)
+        if parts[2] in ('a', 'c'):
+            user_steps[chat_id]['report_type'] = "🔄 Aylanma"
         open_calendar(call, parts[2])
         return
     mode = parts[2]
-    start = user_steps[chat_id].get('range_start') if mode == 'r' else None
+    start = user_steps[chat_id].get('range_start') if mode != 's' else None
+    first = user_steps[chat_id].get('cmp_first')
     if action == "n":
         year, month = map(int, parts[3].split("-"))
-        bot.edit_message_text(calendar_text(mode, start), chat_id, msg_id, reply_markup=build_calendar(year, month, mode, start))
+        bot.edit_message_text(calendar_text(mode, start, first), chat_id, msg_id,
+                              reply_markup=build_calendar(year, month, mode, start))
         return
     if action != "d":
         return
@@ -574,13 +642,28 @@ def handle_calendar(call):
         show_stock_folders(chat_id, message_id=msg_id)
     elif not start:
         user_steps[chat_id]['range_start'] = picked
-        bot.edit_message_text(calendar_text(mode, picked), chat_id, msg_id,
+        bot.edit_message_text(calendar_text(mode, picked, first), chat_id, msg_id,
                               reply_markup=build_calendar(picked.year, picked.month, mode, picked))
     else:
         user_steps[chat_id].pop('range_start', None)
         start, end = sorted((start, picked))
-        bot.edit_message_text(f"📅 Davr: <b>{fmt_period(start, end)}</b>", chat_id, msg_id)
-        run_period(chat_id, start, end)
+        if mode == 'a':
+            # 1-davr tanlandi, shu xabarning o'zida 2-davr so'raladi
+            user_steps[chat_id]['cmp_first'] = (start, end)
+            t = today()
+            bot.edit_message_text(calendar_text('c', first=(start, end)), chat_id, msg_id,
+                                  reply_markup=build_calendar(t.year, t.month, 'c'))
+        elif mode == 'c':
+            if not first:
+                bot.edit_message_text("⚠️ 1-davr topilmadi, solishtirishni qaytadan boshlang.", chat_id, msg_id)
+                return
+            user_steps[chat_id].pop('cmp_first', None)
+            bot.edit_message_text(f"🆚 1-davr: <b>{fmt_period(*first)}</b>\n     2-davr: <b>{fmt_period(start, end)}</b>",
+                                  chat_id, msg_id)
+            compare_turnover(chat_id, first, (start, end))
+        else:
+            bot.edit_message_text(f"📅 Davr: <b>{fmt_period(start, end)}</b>", chat_id, msg_id)
+            run_period(chat_id, start, end)
 
 
 # --- TOVAR QIDIRISH ---
