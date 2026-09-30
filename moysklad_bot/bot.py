@@ -322,12 +322,11 @@ def generate_final_summary(chat_id, s, e, l):
 
     # 3. Kassa (real) = o'tkazilgan chakana savdolar (розничные продажи) + qo'lda ochilgan kirim orderlari, to'lov usullari bo'yicha
     retail = [r for r in ms_rows("/entity/retaildemand", period) if r.get('applicable', True)]
-    # Qarz "iz avansa" orqali yuritiladi: chekning naqd, karta, QR va oldindan to'lovdan (предоплата) tashqari qismi
+    # Qarz = "Сумма из аванса": chekning naqd, karta, QR va oldindan to'lovdan (предоплата) tashqari qismi
     for r in retail:
         paid = sum(r.get(f, 0) or 0 for f in ('cashSum', 'noCashSum', 'qrSum',
                                               'prepaymentCashSum', 'prepaymentNoCashSum', 'prepaymentQrSum'))
         r['_debt'] = max(0, r.get('sum', 0) - paid)
-    retail_qr = cur.total(retail, 'qrSum')
     # Qo'lda ochilgan kirim orderlari (smenaga bog'lanmagan приходный ордер) "To'lov turi" bo'yicha naqd yoki kartaga qo'shiladi
     applied_cashin = [r for r in cashin_rows if r.get('applicable', True) and not linked_to_shift(r)]
     cashin_cash = cur.total([r for r in applied_cashin if payment_type(r) == 'cash'], 'sum')
@@ -335,17 +334,10 @@ def generate_final_summary(chat_id, s, e, l):
     kassa_cash = cur.total(retail, 'cashSum') + cashin_cash
     kassa_card = cur.total(retail, 'noCashSum') + cashin_card
     kassa_total = cur.total(retail, 'sum') + cashin_cash + cashin_card
-    retail_prepaid = cur.total(retail, 'prepaymentCashSum', 'prepaymentNoCashSum', 'prepaymentQrSum')
 
     # 4. Foyda = operatsion foyda (операционная прибыль): yalpi foyda - operatsion xarajatlar (kassa + bank to'lovlari)
     operating_p = gross_p - operating_expenses(cashout_rows + ms_rows("/entity/paymentout", period), cur)
 
-    # QR va oldindan to'lov bo'lmasa, ularning qatori ko'rsatilmaydi
-    extra_lines = ""
-    if retail_qr:
-        extra_lines += f"    ├ 📱 QR: {money(retail_qr)}\n"
-    if retail_prepaid:
-        extra_lines += f"    ├ 🔄 Oldindan to'lov: {money(retail_prepaid)}\n"
     report = (f"🗓 <b>UMUMIY HISOBOT: {l}</b>\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
               f"💰 SAVDO (Umumiy): {money(total_s)}\n"
@@ -354,7 +346,6 @@ def generate_final_summary(chat_id, s, e, l):
               f"🏦 <b>KASSA (REAL): {money(kassa_total)}</b>\n"
               f"    ├ 💵 Naqd: {money(kassa_cash)}\n"
               f"    ├ 💳 Karta: {money(kassa_card)}\n"
-              f"{extra_lines}"
               f"    └ 📝 Qarz: {money(cur.total(retail, '_debt'))}\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
               f"💸 <b>FOYDA: {money(operating_p)}</b>")
