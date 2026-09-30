@@ -473,6 +473,14 @@ def trend_text(old, new):
     return f"🔺 {pct:.1f}% ko'p" if pct > 0 else f"🔻 {abs(pct):.1f}% kam"
 
 
+def summary_lines(t1, t2, names, money):
+    """"Qisqacha" bloki: JAMI bo'yicha Rasxod, Prixod va yakuniy qoldiq, 2-davr 1-davrga nisbatan."""
+    line = lambda label, key: (f"{label}: {money(t1[key][1])} → <b>{money(t2[key][1])}</b> "
+                               f"({trend_text(t1[key][1], t2[key][1])})\n")
+    return (f"<b>Qisqacha ({names[1]}, {names[0]}ga nisbatan):</b>\n"
+            + line("📤 Rasxod", "outcome") + line("📥 Prixod", "income") + line("📦 Yakuniy qoldiq", "onPeriodEnd"))
+
+
 def compare_turnover(chat_id, p1, p2, names=("1-davr", "2-davr"), title="IKKI DAVR", note=None):
     """Ikki davr aylanmasini bosh guruhlar bo'yicha solishtiradi. p1 - eski (taqqoslanadigan) davr, p2 - yangi davr."""
     bot.send_message(chat_id, "⏳ Solishtirilmoqda...")
@@ -498,12 +506,7 @@ def compare_turnover(chat_id, p1, p2, names=("1-davr", "2-davr"), title="IKKI DA
            f"▶️ {names[1]}: {fmt_period(*p2)}\n")
     if note:
         txt += f"<i>{note}</i>\n"
-    txt += (f"━━━━━━━━━━━━━━━━━━━━\n<b>Qisqacha ({names[1]}, {names[0]}ga nisbatan):</b>\n"
-            f"📤 Rasxod: {money(t1['outcome'][1])} → <b>{money(t2['outcome'][1])}</b> ({trend_text(t1['outcome'][1], t2['outcome'][1])})\n"
-            f"📥 Prixod: {money(t1['income'][1])} → <b>{money(t2['income'][1])}</b> ({trend_text(t1['income'][1], t2['income'][1])})\n"
-            f"📦 Yakuniy qoldiq: {money(t1['onPeriodEnd'][1])} → <b>{money(t2['onPeriodEnd'][1])}</b> "
-            f"({trend_text(t1['onPeriodEnd'][1], t2['onPeriodEnd'][1])})\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n")
+    txt += f"━━━━━━━━━━━━━━━━━━━━\n{summary_lines(t1, t2, names, money)}━━━━━━━━━━━━━━━━━━━━\n\n"
     txt += "\n".join(block(g, g1.get(g, zero), g2.get(g, zero)) for g in group_names)
     if len(group_names) > 1:
         txt += "━━━━━━━━━━━━━━━━━━━━\n" + block("JAMI", t1, t2)
@@ -582,8 +585,16 @@ def monthly_turnover(chat_id, start, end):
 
     group_names = group_order({g for groups, _, _ in data for g in groups})
     txt = (f"📈 <b>AYLANMA OYLAR BO'YICHA</b>\n{fmt_period(start, end)}\n"
-           f"<i>⭐ — eng ko'p bo'lgan oy, ⏳ — oy hali tugamagan</i>\n━━━━━━━━━━━━━━━━━━━━\n"
-           f"📊 <b>JAMI</b>\n{block(None, [totals for _, totals, _ in data])}━━━━━━━━━━━━━━━━━━━━\n\n")
+           f"<i>⭐ — eng ko'p bo'lgan oy, ⏳ — oy hali tugamagan</i>\n━━━━━━━━━━━━━━━━━━━━\n")
+    if len(data) >= 2:
+        # Oxirgi oy undan oldingi oy bilan (nomlardagi "(1–10)", "⏳" belgilarisiz)
+        short_names = [n.split(" (")[0].replace(" ⏳", "") for n in names[-2:]]
+        txt += summary_lines(data[-2][1], data[-1][1], short_names, money)
+        partial = [full for full, short in zip(names[-2:], short_names) if full != short]
+        if partial:
+            txt += f"<i>Diqqat: {', '.join(partial)} — to'liq oy emas</i>\n"
+        txt += "━━━━━━━━━━━━━━━━━━━━\n"
+    txt += (f"📊 <b>JAMI</b>\n{block(None, [totals for _, totals, _ in data])}━━━━━━━━━━━━━━━━━━━━\n\n")
     txt += "\n".join(block(g, [groups.get(g, zero) for groups, _, _ in data]) for g in group_names)
     send_long(chat_id, txt)
 
