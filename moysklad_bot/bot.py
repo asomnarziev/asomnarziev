@@ -62,7 +62,8 @@ def ms_get(path, params):
     """MoySklad band bo'lsa (503 va h.k.) biroz kutib, qayta urinib ko'radi."""
     for delay in RETRY_DELAYS + [None]:
         try:
-            r = requests.get(MOYSKLAD_API + path, headers=headers, params=params, timeout=90)
+            url = path if path.startswith("http") else MOYSKLAD_API + path
+            r = requests.get(url, headers=headers, params=params, timeout=90)
         except (requests.ConnectionError, requests.Timeout):
             if delay is None:
                 raise
@@ -73,11 +74,11 @@ def ms_get(path, params):
         time.sleep(delay)
 
 
-def ms_rows(path, params=None):
-    """MoySklad'dan barcha qatorlarni oladi (1000 tadan ko'p bo'lsa sahifalab)."""
+def ms_rows(path, params=None, limit=1000):
+    """MoySklad'dan barcha qatorlarni oladi (limit tadan ko'p bo'lsa sahifalab). expand ishlatilsa limit 100 dan oshmasin."""
     rows, offset = [], 0
     while True:
-        data = ms_get(path, dict(params or {}, limit=1000, offset=offset))
+        data = ms_get(path, dict(params or {}, limit=limit, offset=offset))
         batch = data.get('rows', [])
         rows += batch
         offset += len(batch)
@@ -165,6 +166,7 @@ def dispatch_callback(call):
     elif call.data.startswith("pr:"): handle_preset(call)
     elif call.data.startswith("top:"): handle_top_choice(call)
     elif call.data == "topmenu": show_top_menu(call)
+    elif call.data == "stale": generate_stale_products(chat_id)
     # Eski xabarlardagi tugmalar ham ishlashi uchun
     elif call.data in ("date_today", "date_yesterday"):
         call.data = "pr:" + call.data[5:]
@@ -385,6 +387,79 @@ def generate_final_summary(chat_id, s, e, l):
               f"💸 <b>FOYDA: {money(operating_p)}</b>")
 
     bot.send_message(chat_id, report)
+
+
+# --- PRIXODDAN BERI SOTILMAYOTGAN TOVARLAR ---
+STALE_LOOKBACK_DAYS = 365
+STALE_MAX_LINES = 100
+
+
+def ref_id(obj):
+    """meta.href dagi id (so'rov parametrlarisiz, masalan "...?expand=supplier")."""
+    return obj.get('meta', {}).get('href', '').split('?')[0].split('/')[-1]
+
+
+def last_dates_by_product(paths, since):
+    """Hujjatlar pozitsiyalari bo'yicha har tovar uchun eng oxirgi hujjat sanasi (faqat o'tkazilgan hujjatlar)."""
+    last = {}
+    params = {"filter": f"moment>={since:%Y-%m-%d} 00:00:00", "expand": "positions"}
+    for path in paths:
+        for doc in ms_rows(path, params, limit=100):
+            if not doc.get('applicable', True):
+                continue
+            moment = dt.datetime.strptime(doc['moment'][:19], "%Y-%m-%d %H:%M:%S")
+            positions = doc.get('positions', {})
+            rows = positions.get('rows')
+            if rows is None and positions.get('meta', {}).get('href'):
+                rows = ms_rows(positions['meta']['href'])  # pozitsiyalar ro'yxatda kelmasa, alohida olinadi
+            for pos in rows or []:
+                pid = ref_id(pos.get('assortment', {}))
+                if pid and (pid not in last or moment > last[pid]):
+                    last[pid] = moment
+    return last
+
+
+def generate_stale_products(chat_id):
+    """Qoldig'i bor, lekin oxirgi prixoddan (приёмка/оприходование) keyin sotilmagan tovarlar, eng eskisi birinchi."""
+    bot.send_message(chat_id, "⏳ Prixoddan beri sotilmayotgan tovarlar hisoblanmoqda (1 yillik hujjatlar tekshiriladi)...")
+    t = today()
+    since = t - dt.timedelta(days=STALE_LOOKBACK_DAYS)
+    stock = [r for r in ms_rows("/report/stock/all") if (r.get('stock') or 0) > 0]
+    last_income = last_dates_by_product(["/entity/supply", "/entity/enter"], since)
+    last_sale = last_dates_by_product(["/entity/retaildemand", "/entity/demand"], since)
+    base = Currencies().base
+    money = lambda amount: fmt_money(amount, base)
+
+    stale = []
+    for r in stock:
+        pid = ref_id(r)
+        income, sale = last_income.get(pid), last_sale.get(pid)
+        if income and (not sale or sale < income):
+            stale.append(((t - income.date()).days, income, r))
+        elif not income and not sale:
+            stale.append((STALE_LOOKBACK_DAYS + 1, None, r))  # prixod 1 yildan oldin, 1 yil davomida sotilmagan
+    stale.sort(key=lambda x: x[0], reverse=True)
+    if not stale:
+        bot.send_message(chat_id, "✅ Qoldiqdagi barcha tovarlar oxirgi prixoddan keyin kamida bir marta sotilgan.")
+        return
+
+    value = lambda r: (r.get('stock') or 0) * (r.get('price') or 0) / 100
+    total_qty = sum(r.get('stock') or 0 for _, _, r in stale)
+    total_value = sum(value(r) for _, _, r in stale)
+    txt = (f"🐌 <b>PRIXODDAN BERI SOTILMAYOTGAN TOVARLAR</b>\n<i>{t:%d.%m.%Y} holatiga, eng uzoq turganlari birinchi</i>\n"
+           f"━━━━━━━━━━━━━━━━━━━━\n"
+           f"Tovarlar: <b>{len(stale)} ta</b>, qoldiq: <b>{fmt_qty(total_qty)} ta | {money(total_value)}</b> (tannarx bo'yicha)\n"
+           f"━━━━━━━━━━━━━━━━━━━━\n\n")
+    for i, (days, income, r) in enumerate(stale[:STALE_MAX_LINES], 1):
+        when = (f"prixod {income:%d.%m.%Y}, {days} kun oldin" if income
+                else f"prixod {STALE_LOOKBACK_DAYS} kundan ham oldin")
+        name = r.get('name') or "Noma'lum"
+        txt += (f"<b>{i}.</b> {esc(name[:45])}\n"
+                f"      Qoldiq: {fmt_qty(r.get('stock') or 0)} ta | {money(value(r))}\n"
+                f"      📥 {when} — shundan beri sotilmagan\n")
+    if len(stale) > STALE_MAX_LINES:
+        txt += f"\n<i>... va yana {len(stale) - STALE_MAX_LINES} ta tovar</i>"
+    send_long(chat_id, txt)
 
 
 # --- AYLANMA (ОБОРОТЫ) ---
@@ -691,7 +766,7 @@ def calculate_folder_stock(call):
     send_long(chat_id, f"📋 <b>QOLDIQLAR ({label})</b>\n\n{details}\n🔢 Jami: {qty:,.0f} ta\n💰 Qiymati: ${total:,.2f}")
 
 
-TOP_SIZES = (50, 100, 150)
+TOP_SIZES = (10, 20, 30)
 
 
 def period_markup(report_type):
@@ -711,11 +786,13 @@ def period_markup(report_type):
 def top_menu_markup():
     markup = types.InlineKeyboardMarkup()
     markup.row(*[types.InlineKeyboardButton(f"🏆 Top {n}", callback_data=f"top:q:{n}") for n in TOP_SIZES])
+    markup.row(types.InlineKeyboardButton("🐌 Prixoddan beri sotilmayotganlar", callback_data="stale"))
     return markup
 
 
 TOP_MENU_TEXT = ("<b>🏆 Top Tovarlar</b>\n\nNechta tovar ko'rsatilsin?\n"
-                 "<i>Sotilgan soni bo'yicha: avval eng ko'p, keyin eng kam sotilganlar</i>")
+                 "<i>Sotilgan soni bo'yicha: avval eng ko'p, keyin eng kam sotilganlar</i>\n\n"
+                 "🐌 — qoldig'i bor, lekin oxirgi prixoddan beri bitta ham sotilmagan tovarlar")
 
 
 @bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text in ["📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "🔄 Aylanma", "🏆 Top Tovarlar"])
