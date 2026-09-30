@@ -50,14 +50,30 @@ def esc(text):
     return html.escape(str(text))
 
 
+RETRY_STATUSES = {429, 500, 502, 503, 504}
+RETRY_DELAYS = [3, 6, 12]  # soniya
+
+
+def ms_get(path, params):
+    """MoySklad band bo'lsa (503 va h.k.) biroz kutib, qayta urinib ko'radi."""
+    for delay in RETRY_DELAYS + [None]:
+        try:
+            r = requests.get(MOYSKLAD_API + path, headers=headers, params=params, timeout=90)
+        except (requests.ConnectionError, requests.Timeout):
+            if delay is None:
+                raise
+        else:
+            if r.status_code not in RETRY_STATUSES or delay is None:
+                r.raise_for_status()
+                return r.json()
+        time.sleep(delay)
+
+
 def ms_rows(path, params=None):
     """MoySklad'dan barcha qatorlarni oladi (1000 tadan ko'p bo'lsa sahifalab)."""
     rows, offset = [], 0
     while True:
-        p = dict(params or {}, limit=1000, offset=offset)
-        r = requests.get(MOYSKLAD_API + path, headers=headers, params=p, timeout=60)
-        r.raise_for_status()
-        data = r.json()
+        data = ms_get(path, dict(params or {}, limit=1000, offset=offset))
         batch = data.get('rows', [])
         rows += batch
         offset += len(batch)
@@ -179,6 +195,7 @@ def dispatch_callback(call):
 # --- HISOBOTLAR ---
 def process_reports(chat_id, s, e, l):
     rtype = user_steps[chat_id].get('report_type')
+    bot.send_message(chat_id, f"⏳ <b>{l}</b> hisoboti tayyorlanmoqda...")
     if rtype == "📦 Sotuv Tovarlar Bo'yicha":
         generate_product_sales_report(chat_id, s, e, l)
     else:
