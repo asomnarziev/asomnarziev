@@ -176,6 +176,10 @@ def dispatch_callback(call):
     elif call.data.startswith('fcalc_'): calculate_folder_stock(call)
     elif call.data == 'cmpmenu': show_compare_menu(call)
     elif call.data.startswith('cp:'): handle_compare_preset(call)
+    elif call.data.startswith('mp:'): handle_months_preset(call)
+    elif call.data.startswith('mon:'):
+        _, d1, d2 = call.data.split(':')
+        monthly_turnover(chat_id, dt.date.fromisoformat(d1), dt.date.fromisoformat(d2))
     elif call.data.startswith('cmp:'):
         # Tayyor aylanma hisoboti tagidagi tugma: 1-davr shu hisobot davri, 2-davr kalendardan
         _, d1, d2 = call.data.split(':')
@@ -369,10 +373,15 @@ def root_group_name(assortment, folders):
     return folders[folder_id].get('name') or NO_GROUP
 
 
-def turnover_by_group(s, e):
+def load_folders():
+    return {f['id']: f for f in ms_rows("/entity/productfolder")}
+
+
+def turnover_by_group(s, e, folders=None):
     """{bosh guruh: jami}, umumiy jami va tovarlar soni."""
     rows = ms_rows("/report/turnover/all", {"momentFrom": s, "momentTo": e})
-    folders = {f['id']: f for f in ms_rows("/entity/productfolder")} if rows else {}
+    if folders is None:
+        folders = load_folders() if rows else {}
     groups = {}
     for r in rows:
         groups.setdefault(root_group_name(r.get('assortment', {}), folders), []).append(r)
@@ -403,7 +412,9 @@ def generate_turnover_report(chat_id, s, e, l):
     if len(groups) > 1:
         txt += "━━━━━━━━━━━━━━━━━━━━\n" + block("JAMI", all_totals)
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🆚 Boshqa davr bilan solishtirish", callback_data=f"cmp:{s[:10]}:{e[:10]}"))
+    if s[:7] != e[:7]:  # davr bir necha oyni o'z ichiga oladi
+        markup.row(types.InlineKeyboardButton("📈 Oylar bo'yicha ko'rish", callback_data=f"mon:{s[:10]}:{e[:10]}"))
+    markup.row(types.InlineKeyboardButton("🆚 Boshqa davr bilan solishtirish", callback_data=f"cmp:{s[:10]}:{e[:10]}"))
     send_long(chat_id, txt, reply_markup=markup)
 
 
@@ -415,7 +426,10 @@ def show_compare_menu(call):
     markup.row(btn("📅 Haftalik: Shu hafta ↔ O'tgan hafta", callback_data="cp:week"))
     markup.row(btn("📅 Oylik: Shu oy ↔ O'tgan oy", callback_data="cp:month"))
     markup.row(btn("🗓 Kalendardan ikki davr tanlash", callback_data="cal:o:a"))
-    bot.edit_message_text("🆚 <b>Aylanmani solishtirish</b>\n\nNimani nima bilan solishtiramiz?",
+    markup.row(btn("📈 3 oy", callback_data="mp:3"), btn("📈 6 oy", callback_data="mp:6"), btn("📈 12 oy", callback_data="mp:12"))
+    markup.row(btn("📈 Kalendardan oraliq (oyma-oy)", callback_data="cal:o:m"))
+    bot.edit_message_text("🆚 <b>Aylanmani solishtirish</b>\n\n"
+                          "🆚 — ikki davrni solishtirish\n📈 — oraliqni oylar bo'yicha ko'rish (3/6/12 oy — oxirgi to'liq oylar)",
                           call.message.chat.id, call.message.message_id, reply_markup=markup)
 
 
@@ -493,6 +507,84 @@ def compare_turnover(chat_id, p1, p2, names=("1-davr", "2-davr"), title="IKKI DA
     txt += "\n".join(block(g, g1.get(g, zero), g2.get(g, zero)) for g in group_names)
     if len(group_names) > 1:
         txt += "━━━━━━━━━━━━━━━━━━━━\n" + block("JAMI", t1, t2)
+    send_long(chat_id, txt)
+
+
+# --- AYLANMA OYLAR BO'YICHA ---
+MAX_MONTHS = 12
+
+
+def split_months(start, end):
+    """Oraliqni kalendar oylariga bo'ladi: [(boshlanish, tugash, nomi), ...]. Chala oylar kunlari bilan belgilanadi."""
+    t = today()
+    parts, cur = [], start
+    multi_year = start.year != end.year
+    while cur <= end:
+        month_end = cur.replace(day=calendar.monthrange(cur.year, cur.month)[1])
+        e = min(month_end, end)
+        name = UZ_MONTHS[cur.month - 1] + (f" {cur.year % 100:02d}" if multi_year else "")
+        if cur.day != 1 or e != month_end:
+            name += f" ({cur.day}–{e.day})"
+        if e >= t and e < month_end:
+            name += " ⏳"
+        parts.append((cur, e, name))
+        cur = month_end + dt.timedelta(days=1)
+    return parts
+
+
+def handle_months_preset(call):
+    """Oxirgi N ta to'liq oy."""
+    n = int(call.data[3:])
+    last_end = today().replace(day=1) - dt.timedelta(days=1)
+    first = last_end.replace(day=1)
+    for _ in range(n - 1):
+        first = (first - dt.timedelta(days=1)).replace(day=1)
+    bot.edit_message_text(f"📈 <b>Oxirgi {n} oy</b>: {fmt_period(first, last_end)}", call.message.chat.id, call.message.message_id)
+    monthly_turnover(call.message.chat.id, first, last_end)
+
+
+def monthly_turnover(chat_id, start, end):
+    """Aylanma oyma-oy: har bosh guruh uchun Prixod, Rasxod va oy oxiridagi qoldiq (soni va summasi)."""
+    months = split_months(start, end)
+    if len(months) > MAX_MONTHS:
+        bot.send_message(chat_id, f"⚠️ Ko'pi bilan {MAX_MONTHS} oy tanlash mumkin. Qisqaroq oraliq tanlang.")
+        return
+    bot.send_message(chat_id, f"⏳ {len(months)} oy bo'yicha aylanma tayyorlanmoqda...")
+    folders = load_folders()
+    data = [turnover_by_group(f"{s:%Y-%m-%d} 00:00:00", f"{e:%Y-%m-%d} 23:59:59", folders) for s, e, _ in months]
+    base = Currencies().base
+    money = lambda amount: fmt_money(amount, base)
+    zero = {key: (0, 0) for key, _ in TURNOVER_PARTS}
+    names = [name for _, _, name in months]
+    metrics = [("income", "📥 Prixod"), ("outcome", "📤 Rasxod"), ("onPeriodEnd", "📦 Oy oxiridagi qoldiq")]
+
+    def block(title, per_month):
+        lines = f"📁 <b>{esc(title)}</b>\n" if title else ""
+        for key, label in metrics:
+            values = [m[key] for m in per_month]
+            sums = [v[1] for v in values]
+            if len(values) < 2:
+                note = ""
+            elif key == "onPeriodEnd":
+                note = f" — davr davomida {trend_text(sums[0], sums[-1])}"
+            else:
+                prev_avg = sum(sums[:-1]) / (len(sums) - 1)
+                note = f" — oxirgi oy o'rtachadan {trend_text(prev_avg, sums[-1])}"
+            lines += f"{label}{note}\n"
+            best = max(range(len(sums)), key=lambda i: sums[i]) if key != "onPeriodEnd" and any(sums) else None
+            for i, (qty, total) in enumerate(values):
+                star = " ⭐" if i == best and len(values) > 1 else ""
+                lines += f"      {names[i]}: {fmt_qty(qty)} ta | {money(total)}{star}\n"
+            if key != "onPeriodEnd" and len(values) > 1:
+                lines += f"      <i>Jami: {fmt_qty(sum(v[0] for v in values))} ta | {money(sum(sums))}, " \
+                         f"o'rtacha: {money(sum(sums) / len(sums))}/oy</i>\n"
+        return lines
+
+    group_names = group_order({g for groups, _, _ in data for g in groups})
+    txt = (f"📈 <b>AYLANMA OYLAR BO'YICHA</b>\n{fmt_period(start, end)}\n"
+           f"<i>⭐ — eng ko'p bo'lgan oy, ⏳ — oy hali tugamagan</i>\n━━━━━━━━━━━━━━━━━━━━\n"
+           f"📊 <b>JAMI</b>\n{block(None, [totals for _, totals, _ in data])}━━━━━━━━━━━━━━━━━━━━\n\n")
+    txt += "\n".join(block(g, [groups.get(g, zero) for groups, _, _ in data]) for g in group_names)
     send_long(chat_id, txt)
 
 
@@ -610,6 +702,7 @@ def calendar_text(mode, start=None, first=None):
     if mode == 's':
         return "📅 <b>Qoldiq sanasini tanlang</b>"
     title = {"a": "🆚 <b>1-davrni tanlang</b>",
+             "m": "📈 <b>Oraliqni tanlang</b> (oylar bo'yicha ko'rsatiladi)",
              "c": f"🆚 <b>2-davrni tanlang</b>\n1-davr: {fmt_period(*first)}" if first else "🆚 <b>2-davrni tanlang</b>"
              }.get(mode, "📅 <b>Davrni tanlang</b>")
     if not start:
@@ -674,7 +767,7 @@ def handle_calendar(call):
         return
     if action == "o":
         user_steps[chat_id].pop('cmp_first', None)
-        if parts[2] in ('a', 'c'):
+        if parts[2] in ('a', 'c', 'm'):
             user_steps[chat_id]['report_type'] = "🔄 Aylanma"
         open_calendar(call, parts[2])
         return
@@ -713,6 +806,9 @@ def handle_calendar(call):
             bot.edit_message_text(f"🆚 1-davr: <b>{fmt_period(*first)}</b>\n     2-davr: <b>{fmt_period(start, end)}</b>",
                                   chat_id, msg_id)
             compare_turnover(chat_id, first, (start, end))
+        elif mode == 'm':
+            bot.edit_message_text(f"📈 Oraliq: <b>{fmt_period(start, end)}</b>", chat_id, msg_id)
+            monthly_turnover(chat_id, start, end)
         else:
             bot.edit_message_text(f"📅 Davr: <b>{fmt_period(start, end)}</b>", chat_id, msg_id)
             run_period(chat_id, start, end)
