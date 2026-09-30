@@ -105,6 +105,7 @@ def main_menu(chat_id):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton("📊 Umumiy Hisobot"), types.KeyboardButton("📦 Sotuv Tovarlar Bo'yicha"))
     markup.add(types.KeyboardButton("📁 Tovar Qoldiqlari"), types.KeyboardButton("🔄 Aylanma"))
+    markup.add(types.KeyboardButton("🏆 Top Tovarlar"))
     bot.send_message(chat_id, "👋 Bo'limni tanlang:", reply_markup=markup)
 
 
@@ -163,6 +164,7 @@ def dispatch_callback(call):
     if call.data.startswith("cal:"): handle_calendar(call)
     elif call.data.startswith("pr:"): handle_preset(call)
     elif call.data.startswith("top:"): handle_top_choice(call)
+    elif call.data == "topmenu": show_top_menu(call)
     # Eski xabarlardagi tugmalar ham ishlashi uchun
     elif call.data in ("date_today", "date_yesterday"):
         call.data = "pr:" + call.data[5:]
@@ -194,6 +196,8 @@ def process_reports(chat_id, s, e, l):
     bot.send_message(chat_id, f"⏳ <b>{l}</b> hisoboti tayyorlanmoqda...")
     if rtype == "📦 Sotuv Tovarlar Bo'yicha":
         generate_product_sales_report(chat_id, s, e, l)
+    elif rtype == "🏆 Top Tovarlar":
+        generate_top_products(chat_id, s, e, l)
     elif rtype == "🔄 Aylanma":
         generate_turnover_report(chat_id, s, e, l)
     else:
@@ -201,9 +205,25 @@ def process_reports(chat_id, s, e, l):
 
 
 def generate_product_sales_report(chat_id, s, e, l):
-    """Eng ko'p va eng kam sotilgan tovarlar (soni yoki summasi bo'yicha), tanlangan Top N tadan."""
-    steps = user_steps.get(chat_id, {})
-    top_n, by = steps.get('top_n', TOP_SIZES[0]), steps.get('top_by', 's')
+    res = ms_rows("/report/profit/byvariant", {"momentFrom": s, "momentTo": e})
+    if not res:
+        bot.send_message(chat_id, f"📦 <b>{l}</b> davrida sotuvlar topilmadi.")
+        return
+    # Eng ko'p sotilganlar birinchi
+    res.sort(key=lambda r: r.get('sellSum', 0), reverse=True)
+    txt = f"📦 <b>SOTUV TOVARLAR ({l})</b>\n\n"
+    for r in res[:25]:
+        name = r.get('variantName') or r.get('name')
+        if not name: name = r.get('assortment', {}).get('name', "Noma'lum tovar")
+        txt += f"🔹 {esc(name[:30])}\n    └ {r.get('sellQuantity', 0):,.0f} ta | ${r.get('sellSum', 0)/100:,.2f}\n"
+    if len(res) > 25:
+        txt += f"\n... va yana {len(res) - 25} ta tovar"
+    send_long(chat_id, txt)
+
+
+def generate_top_products(chat_id, s, e, l):
+    """Eng ko'p va eng kam sotilgan tovarlar (sotilgan soni bo'yicha), tanlangan Top N tadan."""
+    top_n = user_steps.get(chat_id, {}).get('top_n', TOP_SIZES[0])
     res = [r for r in ms_rows("/report/profit/byvariant", {"momentFrom": s, "momentTo": e})
            if r.get('sellSum', 0) or r.get('sellQuantity', 0)]
     if not res:
@@ -211,20 +231,17 @@ def generate_product_sales_report(chat_id, s, e, l):
         return
     qty = lambda r: r.get('sellQuantity', 0) or 0
     total = lambda r: r.get('sellSum', 0) or 0
-    key = (lambda r: (qty(r), total(r))) if by == "q" else (lambda r: (total(r), qty(r)))
-    res.sort(key=key, reverse=True)
+    res.sort(key=lambda r: (qty(r), total(r)), reverse=True)
     top = res[:top_n]
     bottom = list(reversed(res[top_n:][-top_n:]))  # eng kamlari, top ro'yxatiga kirmaganlar orasidan
     base = Currencies().base  # hisobot summalari asosiy valyutada
     money = lambda amount: fmt_money(amount, base)
     all_qty, all_sum = sum(map(qty, res)), sum(map(total, res)) / 100
-    sort_name = TOP_SORTS[by].split(" ", 1)[1].lower()
 
     def listing(title, items):
         items_qty, items_sum = sum(map(qty, items)), sum(map(total, items)) / 100
-        share_base, share_part = (all_qty, items_qty) if by == "q" else (all_sum, items_sum)
-        share = f", umumiy savdoning {share_part / share_base * 100:.0f}%" if share_base else ""
-        txt = (f"{title}: {l}</b>\n<i>{sort_name.capitalize()}</i>\n━━━━━━━━━━━━━━━━━━━━\n"
+        share = f", sotilgan jami donaning {items_qty / all_qty * 100:.0f}%" if all_qty else ""
+        txt = (f"{title}: {l}</b>\n<i>Sotilgan soni bo'yicha</i>\n━━━━━━━━━━━━━━━━━━━━\n"
                f"Jami: <b>{fmt_qty(items_qty)} ta | {money(items_sum)}</b>{share}\n━━━━━━━━━━━━━━━━━━━━\n\n")
         for i, r in enumerate(items, 1):
             name = r.get('variantName') or r.get('name') or r.get('assortment', {}).get('name') or "Noma'lum tovar"
@@ -233,9 +250,6 @@ def generate_product_sales_report(chat_id, s, e, l):
 
     send_long(chat_id, f"📊 <b>{l}</b>: {len(res)} turdagi tovar sotilgan, jami "
                        f"<b>{fmt_qty(all_qty)} ta | {money(all_sum)}</b>")
-    if not top_n:
-        send_long(chat_id, listing(f"📋 <b>BARCHA SOTILGAN TOVARLAR ({len(res)} ta)", res))
-        return
     send_long(chat_id, listing(f"🏆 <b>ENG KO'P SOTILGAN TOP {len(top)}", top))
     if bottom:
         send_long(chat_id, listing(f"🐢 <b>ENG KAM SOTILGAN {len(bottom)} TA", bottom))
@@ -678,7 +692,6 @@ def calculate_folder_stock(call):
 
 
 TOP_SIZES = (50, 100, 150)
-TOP_SORTS = {"q": "🔢 Soni bo'yicha", "s": "💰 Summa bo'yicha"}
 
 
 def period_markup(report_type):
@@ -690,36 +703,48 @@ def period_markup(report_type):
     markup.row(btn("📅 Kalendardan tanlash", callback_data="cal:o:r"))
     if report_type == "🔄 Aylanma":
         markup.row(btn("🆚 Solishtirish", callback_data="cmpmenu"))
+    if report_type == "📦 Sotuv Tovarlar Bo'yicha":
+        markup.row(btn("🏆 Top tovarlar (eng ko'p / eng kam)", callback_data="topmenu"))
     return markup
 
 
-@bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text in ["📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "🔄 Aylanma"])
+def top_menu_markup():
+    markup = types.InlineKeyboardMarkup()
+    markup.row(*[types.InlineKeyboardButton(f"🏆 Top {n}", callback_data=f"top:q:{n}") for n in TOP_SIZES])
+    return markup
+
+
+TOP_MENU_TEXT = ("<b>🏆 Top Tovarlar</b>\n\nNechta tovar ko'rsatilsin?\n"
+                 "<i>Sotilgan soni bo'yicha: avval eng ko'p, keyin eng kam sotilganlar</i>")
+
+
+@bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text in ["📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "🔄 Aylanma", "🏆 Top Tovarlar"])
 def sales_init(message):
     user_steps[message.chat.id] = {'report_type': message.text}
-    if message.text == "📦 Sotuv Tovarlar Bo'yicha":
+    if message.text == "🏆 Top Tovarlar":
         # Avval nechta tovar ko'rsatilishi, keyin davr tanlanadi
-        btn = types.InlineKeyboardButton
-        markup = types.InlineKeyboardMarkup()
-        for by, title in TOP_SORTS.items():
-            markup.row(btn(title, callback_data="cal:x"))  # sarlavha, bosilmaydi
-            markup.row(*[btn(f"Top {n}", callback_data=f"top:{by}:{n}") for n in TOP_SIZES],
-                       btn("📋 Hammasi", callback_data=f"top:{by}:all"))
-        bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nQaysi bo'yicha tartiblab, nechta tovar ko'rsatilsin?\n"
-                         f"<i>Top — eng ko'p va eng kam sotilganlar alohida chiqadi\n📋 Hammasi — davrda sotilgan barcha tovarlar</i>", reply_markup=markup)
+        bot.send_message(message.chat.id, TOP_MENU_TEXT, reply_markup=top_menu_markup())
         return
     bot.send_message(message.chat.id, f"<b>{message.text}</b>\n\nDavrni tanlang:", reply_markup=period_markup(message.text))
 
 
+def show_top_menu(call):
+    user_steps[call.message.chat.id]['report_type'] = "🏆 Top Tovarlar"
+    bot.edit_message_text(TOP_MENU_TEXT, call.message.chat.id, call.message.message_id, reply_markup=top_menu_markup())
+
+
 def handle_top_choice(call):
     chat_id = call.message.chat.id
-    parts = call.data.split(":")
-    by, n = (parts[1], parts[2]) if len(parts) == 3 else ("s", parts[1])  # eski "top:50" tugmalari
-    n = 0 if n == "all" else int(n)  # 0 - hammasi
-    user_steps[chat_id].update({'report_type': "📦 Sotuv Tovarlar Bo'yicha", 'top_n': n, 'top_by': by})
-    what = f"Top {n}" if n else "Hammasi"
-    bot.edit_message_text(f"<b>📦 Sotuv Tovarlar Bo'yicha — {what}, {TOP_SORTS[by].split(' ', 1)[1].lower()}</b>\n\n"
-                          f"Davrni tanlang:", chat_id,
-                          call.message.message_id, reply_markup=period_markup(user_steps[chat_id]['report_type']))
+    n = call.data.split(":")[-1]  # "top:q:50" (eski tugmalarda "top:50", "top:s:50", "top:q:all")
+    if n == "all":
+        # Eski "Hammasi" tugmasi - oddiy sotuv hisoboti
+        user_steps[chat_id]['report_type'] = "📦 Sotuv Tovarlar Bo'yicha"
+        bot.edit_message_text("<b>📦 Sotuv Tovarlar Bo'yicha</b>\n\nDavrni tanlang:", chat_id, call.message.message_id,
+                              reply_markup=period_markup("📦 Sotuv Tovarlar Bo'yicha"))
+        return
+    user_steps[chat_id].update({'report_type': "🏆 Top Tovarlar", 'top_n': int(n)})
+    bot.edit_message_text(f"<b>🏆 Top {n} tovar</b> (soni bo'yicha)\n\nDavrni tanlang:", chat_id,
+                          call.message.message_id, reply_markup=period_markup("🏆 Top Tovarlar"))
 
 
 @bot.message_handler(func=lambda m: m.from_user.id in ALLOWED_USERS and m.text == "📁 Tovar Qoldiqlari")
@@ -895,7 +920,7 @@ def handle_calendar(call):
 
 
 # --- TOVAR QIDIRISH ---
-MENU_BUTTONS = {"📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "📁 Tovar Qoldiqlari", "🔄 Aylanma"}
+MENU_BUTTONS = {"📊 Umumiy Hisobot", "📦 Sotuv Tovarlar Bo'yicha", "📁 Tovar Qoldiqlari", "🔄 Aylanma", "🏆 Top Tovarlar"}
 STOCK_CACHE_SECONDS = 60
 _stock_cache = {"time": 0, "rows": []}
 
