@@ -465,31 +465,23 @@ def trend_text(old, new):
 
 
 def compare_turnover(chat_id, p1, p2, names=("1-davr", "2-davr"), title="IKKI DAVR", note=None):
-    """Ikki davr aylanmasini bosh guruhlar bo'yicha solishtiradi. p1 - chap ustun, p2 - o'ng ustun."""
+    """Ikki davr aylanmasini bosh guruhlar bo'yicha solishtiradi. p1 - eski (taqqoslanadigan) davr, p2 - yangi davr."""
     bot.send_message(chat_id, "⏳ Solishtirilmoqda...")
     g1, t1, _ = turnover_by_group(f"{p1[0]:%Y-%m-%d} 00:00:00", f"{p1[1]:%Y-%m-%d} 23:59:59")
     g2, t2, _ = turnover_by_group(f"{p2[0]:%Y-%m-%d} 00:00:00", f"{p2[1]:%Y-%m-%d} 23:59:59")
     base = Currencies().base
     money = lambda amount: fmt_money(amount, base)
-    unit = "$" if base == "USD" else base[:2]
     zero = {key: (0, 0) for key, _ in TURNOVER_PARTS}
-    short = {"onPeriodStart": "Boshida", "income": "Prixod", "outcome": "Rasxod", "onPeriodEnd": "Yakuni"}
 
-    def table(a, b):
-        """Telefonda sig'adigan jadval: har ko'rsatkich uchun soni (ta) va summa ($) qatori."""
-        rows = [f"{'':<10}{names[0][:9]:>9}{names[1][:9]:>9}{'Farq':>6}"]
-        for key, _ in TURNOVER_PARTS:
+    def block(title, a, b):
+        """Har ko'rsatkich: nomi va o'zgarish so'z bilan, tagida har davr o'z nomi bilan alohida qatorda."""
+        lines = f"📁 <b>{esc(title)}</b>\n"
+        for key, name in TURNOVER_PARTS:
             (qa, sa), (qb, sb) = a[key], b[key]
-            dq = qb - qa
-            pct = pct_change(sa, sb)
-            if pct is None:
-                dp = "yangi" if sb else "0%"
-            else:
-                dp = "0%" if round(pct) == 0 else f"{pct:+.0f}%"
-            dq_text = (("+" if dq > 0 else "") + fmt_qty(dq)) if dq else "0"
-            rows.append(f"{short[key]:<8}ta{fmt_qty(qa):>9}{fmt_qty(qb):>9}{dq_text:>6}")
-            rows.append(f"{'':<8}{unit:<2}{sa:>9,.0f}{sb:>9,.0f}{dp:>6}")
-        return "<pre>" + esc("\n".join(rows)) + "</pre>"
+            lines += (f"{name} — {trend_text(sa, sb)}\n"
+                      f"      {names[0]}: {fmt_qty(qa)} ta | {money(sa)}\n"
+                      f"      {names[1]}: <b>{fmt_qty(qb)} ta | {money(sb)}</b>\n")
+        return lines
 
     group_names = group_order(set(g1) | set(g2))
     txt = (f"🆚 <b>AYLANMA: {title}</b>\n"
@@ -502,11 +494,10 @@ def compare_turnover(chat_id, p1, p2, names=("1-davr", "2-davr"), title="IKKI DA
             f"📥 Prixod: {money(t1['income'][1])} → <b>{money(t2['income'][1])}</b> ({trend_text(t1['income'][1], t2['income'][1])})\n"
             f"📦 Yakuniy qoldiq: {money(t1['onPeriodEnd'][1])} → <b>{money(t2['onPeriodEnd'][1])}</b> "
             f"({trend_text(t1['onPeriodEnd'][1], t2['onPeriodEnd'][1])})\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"<i>Boshida — davr boshidagi qoldiq, Yakuni — davr oxiridagi qoldiq. Farq: soni bo'yicha dona, summa bo'yicha foiz.</i>\n\n")
-    txt += "\n".join(f"📁 <b>{esc(g)}</b>\n{table(g1.get(g, zero), g2.get(g, zero))}" for g in group_names)
+            f"━━━━━━━━━━━━━━━━━━━━\n\n")
+    txt += "\n".join(block(g, g1.get(g, zero), g2.get(g, zero)) for g in group_names)
     if len(group_names) > 1:
-        txt += f"\n📊 <b>JAMI</b>\n{table(t1, t2)}"
+        txt += "━━━━━━━━━━━━━━━━━━━━\n" + block("JAMI", t1, t2)
     send_long(chat_id, txt)
 
 
