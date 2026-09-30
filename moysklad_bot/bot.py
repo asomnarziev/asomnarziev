@@ -167,6 +167,7 @@ def dispatch_callback(call):
     elif call.data.startswith("top:"): handle_top_choice(call)
     elif call.data == "topmenu": show_top_menu(call)
     elif call.data == "stale": generate_stale_products(chat_id)
+    elif call.data.startswith("stp:"): handle_stale_page(call)
     # Eski xabarlardagi tugmalar ham ishlashi uchun
     elif call.data in ("date_today", "date_yesterday"):
         call.data = "pr:" + call.data[5:]
@@ -391,7 +392,9 @@ def generate_final_summary(chat_id, s, e, l):
 
 # --- PRIXODDAN BERI SOTILMAYOTGAN TOVARLAR ---
 STALE_LOOKBACK_DAYS = 365
-STALE_MAX_LINES = 100
+STALE_PAGE_SIZE = 20
+# Hisoblangan ro'yxat chat bo'yicha saqlanadi, sahifalar orasida MoySklad'ga qayta so'rov yuborilmaydi
+_stale_cache = {}
 
 
 def ref_id(obj):
@@ -446,20 +449,59 @@ def generate_stale_products(chat_id):
     value = lambda r: (r.get('stock') or 0) * (r.get('price') or 0) / 100
     total_qty = sum(r.get('stock') or 0 for _, _, r in stale)
     total_value = sum(value(r) for _, _, r in stale)
-    txt = (f"🐌 <b>PRIXODDAN BERI SOTILMAYOTGAN TOVARLAR</b>\n<i>{t:%d.%m.%Y} holatiga, eng uzoq turganlari birinchi</i>\n"
-           f"━━━━━━━━━━━━━━━━━━━━\n"
-           f"Tovarlar: <b>{len(stale)} ta</b>, qoldiq: <b>{fmt_qty(total_qty)} ta | {money(total_value)}</b> (tannarx bo'yicha)\n"
-           f"━━━━━━━━━━━━━━━━━━━━\n\n")
-    for i, (days, income, r) in enumerate(stale[:STALE_MAX_LINES], 1):
+    header = (f"🐌 <b>PRIXODDAN BERI SOTILMAYOTGAN TOVARLAR</b>\n<i>{t:%d.%m.%Y} holatiga, eng uzoq turganlari birinchi</i>\n"
+              f"━━━━━━━━━━━━━━━━━━━━\n"
+              f"Tovarlar: <b>{len(stale)} ta</b>, qoldiq: <b>{fmt_qty(total_qty)} ta | {money(total_value)}</b> (tannarx bo'yicha)\n"
+              f"━━━━━━━━━━━━━━━━━━━━\n\n")
+    lines = []
+    for i, (days, income, r) in enumerate(stale, 1):
         when = (f"prixod {income:%d.%m.%Y}, {days} kun oldin" if income
                 else f"prixod {STALE_LOOKBACK_DAYS} kundan ham oldin")
         name = r.get('name') or "Noma'lum"
-        txt += (f"<b>{i}.</b> {esc(name[:45])}\n"
-                f"      Qoldiq: {fmt_qty(r.get('stock') or 0)} ta | {money(value(r))}\n"
-                f"      📥 {when} — shundan beri sotilmagan\n")
-    if len(stale) > STALE_MAX_LINES:
-        txt += f"\n<i>... va yana {len(stale) - STALE_MAX_LINES} ta tovar</i>"
-    send_long(chat_id, txt)
+        lines.append(f"<b>{i}.</b> {esc(name[:45])}\n"
+                     f"      Qoldiq: {fmt_qty(r.get('stock') or 0)} ta | {money(value(r))}\n"
+                     f"      📥 {when} — shundan beri sotilmagan\n")
+    _stale_cache[chat_id] = {"header": header, "lines": lines}
+    text, markup = stale_page(chat_id, 0)
+    bot.send_message(chat_id, text, reply_markup=markup)
+
+
+def stale_page(chat_id, page):
+    """Sahifa matni va tugmalari: ⏮ ◀️ 2/8 ▶️ ⏭ va 🔄 Yangilash."""
+    cache = _stale_cache[chat_id]
+    lines = cache["lines"]
+    pages = max(1, -(-len(lines) // STALE_PAGE_SIZE))
+    page = min(max(page, 0), pages - 1)
+    chunk = lines[page * STALE_PAGE_SIZE:(page + 1) * STALE_PAGE_SIZE]
+    btn = types.InlineKeyboardButton
+    markup = types.InlineKeyboardMarkup()
+    if pages > 1:
+        nav = []
+        if page > 0:
+            if pages > 2:
+                nav.append(btn("⏮", callback_data="stp:0"))
+            nav.append(btn("◀️", callback_data=f"stp:{page - 1}"))
+        nav.append(btn(f"{page + 1} / {pages}", callback_data="cal:x"))
+        if page < pages - 1:
+            nav.append(btn("▶️", callback_data=f"stp:{page + 1}"))
+            if pages > 2:
+                nav.append(btn("⏭", callback_data=f"stp:{pages - 1}"))
+        markup.row(*nav)
+    markup.row(btn("🔄 Yangilash", callback_data="stale"))
+    footer = f"\n<i>Sahifa {page + 1} / {pages}</i>" if pages > 1 else ""
+    return cache["header"] + "".join(chunk) + footer, markup
+
+
+def handle_stale_page(call):
+    chat_id = call.message.chat.id
+    if chat_id not in _stale_cache:
+        # Bot qayta ishga tushgan bo'lsa ro'yxat xotirada yo'q
+        markup = types.InlineKeyboardMarkup()
+        markup.row(types.InlineKeyboardButton("🔄 Qayta hisoblash", callback_data="stale"))
+        bot.edit_message_text("⚠️ Bu ro'yxat eskirgan. Qayta hisoblang.", chat_id, call.message.message_id, reply_markup=markup)
+        return
+    text, markup = stale_page(chat_id, int(call.data[4:]))
+    bot.edit_message_text(text, chat_id, call.message.message_id, reply_markup=markup)
 
 
 # --- AYLANMA (ОБОРОТЫ) ---
