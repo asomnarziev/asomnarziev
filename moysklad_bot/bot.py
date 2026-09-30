@@ -202,19 +202,42 @@ def generate_product_sales_report(chat_id, s, e, l):
     send_long(chat_id, txt)
 
 
+# MoySklad'ning "Прибыли и убытки" hisobotidagi kabi bu moddalar operatsion xarajat hisoblanmaydi
+NON_OPERATING_EXPENSE_ITEMS = {"закупка товаров", "возврат", "перемещение", "налоги и сборы"}
+
+
+def operating_expenses(payments):
+    """Operatsion xarajatlar: o'tkazilgan (проведённые) chiqim to'lovlari, tovar xaridi, qaytarish,
+    ko'chirish va soliqlardan tashqari."""
+    items = ms_rows("/entity/expenseitem", {"filter": "archived=true;archived=false"})
+    item_names = {i['id']: i.get('name', '').strip().lower() for i in items}
+    total = 0
+    for r in payments:
+        if not r.get('applicable', True):
+            continue
+        item_id = r.get('expenseItem', {}).get('meta', {}).get('href', '').split('/')[-1]
+        if item_names.get(item_id) not in NON_OPERATING_EXPENSE_ITEMS:
+            total += r.get('sum', 0)
+    return total / 100
+
+
 def generate_final_summary(chat_id, s, e, l):
-    # 1. Savdo va Foyda
+    # 1. Savdo va Yalpi foyda (валовая прибыль)
     p_res = ms_rows("/report/profit/byvariant", {"momentFrom": s, "momentTo": e})
     total_s = sum(r.get('sellSum', 0) for r in p_res) / 100
-    raw_p = sum(r.get('profit', 0) for r in p_res) / 100
+    gross_p = sum(r.get('profit', 0) for r in p_res) / 100
 
     # 2. Kassa Orderlari (Kirim va Chiqim)
     period = {"filter": f"moment>={s};moment<={e}"}
     total_cashin = sum(r.get('sum', 0) for r in ms_rows("/entity/cashin", period)) / 100
-    total_cashout = sum(r.get('sum', 0) for r in ms_rows("/entity/cashout", period)) / 100
+    cashout_rows = ms_rows("/entity/cashout", period)
+    total_cashout = sum(r.get('sum', 0) for r in cashout_rows) / 100
 
     # 3. Kassa Balansi (Faqat kassa orderlari farqi)
     kassa_balance = total_cashin - total_cashout
+
+    # 4. Operatsion foyda (операционная прибыль) = yalpi foyda - operatsion xarajatlar (kassa + bank to'lovlari)
+    operating_p = gross_p - operating_expenses(cashout_rows + ms_rows("/entity/paymentout", period))
 
     report = (f"🗓 <b>UMUMIY HISOBOT: {l}</b>\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -223,8 +246,7 @@ def generate_final_summary(chat_id, s, e, l):
               f"📉 RASXODLAR: ${total_cashout:,.2f}\n"
               f"🏦 <b>KASSA (REAL): ${kassa_balance:,.2f}</b>\n"
               f"━━━━━━━━━━━━━━━━━━━━\n"
-              f"💸 FOYDA: ${raw_p:,.2f}\n"
-              f"✅ <b>SOF FOYDA: ${raw_p - total_cashout:,.2f}</b>")
+              f"💸 <b>OPERATSION FOYDA: ${operating_p:,.2f}</b>")
 
     bot.send_message(chat_id, report)
 
