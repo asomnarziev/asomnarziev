@@ -330,7 +330,6 @@ def deleted_supplies(since: datetime) -> list[dict]:
     for r in _get(url):
         agent = r.get("agent") or {}
         store = r.get("store") or {}
-        owner = r.get("owner") or {}
         result.append({
             "id":            r.get("id", ""),
             "doc_number":    r.get("name", "—"),
