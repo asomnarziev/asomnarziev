@@ -162,10 +162,10 @@ def main():
     ap.add_argument("--apply", action="store_true", help="import: haqiqatda yozish (aks holda dry-run)")
     a = ap.parse_args()
     if a.mode == "export":
-        src = os.environ.get("SRC_WEBHOOK") or sys.exit("SRC_WEBHOOK yo'q (.env)")
+        src = os.environ.get("B24_RU_WEBHOOK") or sys.exit("B24_RU_WEBHOOK yo'q")
         do_export(src)
         return
-    dst = os.environ.get("DST_WEBHOOK") or sys.exit("DST_WEBHOOK yo'q (.env)")
+    dst = os.environ.get("B24_KZ_WEBHOOK") or sys.exit("B24_KZ_WEBHOOK yo'q")
     d = json.loads(EXPORT.read_text())
     imp = Importer(dst, a.apply)
     if not a.apply:
