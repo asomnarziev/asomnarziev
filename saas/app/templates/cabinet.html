@@ -11,7 +11,8 @@
 <code>{{ hook_url }}</code></section>
 <section><h3>2. Telegram chatlar ({{ acc.chats|length }}/{{ acc.max_chats }})</h3>
 <p>Botni chatga ulash: <a href="{{ tg_link }}">{{ tg_link }}</a><br>
-<span class="muted">Guruh uchun botni guruhga qo'shib, <code>/start@{{ config.BOT_USERNAME }} {{ acc.link_code }}</code> yuboring.</span></p>
+<span class="muted">Guruh: botni guruhga qo'shib, <code>/start@{{ config.BOT_USERNAME }} {{ acc.link_code }}</code> yuboring.<br>
+Kanal: botni kanalga <b>administrator</b> (xabar yuborish huquqi bilan) qilib qo'shing va kanalda shu buyruqni yozing, yoki kanal ID (<code>-100...</code>) / <code>@kanal</code> ni qo'lda kiriting.</span></p>
 <table>{% for c in acc.chats %}<tr><td><code>{{ c.chat_id }}</code></td>
 <td><form method="post" action="/cabinet/chat/{{ c.id }}/lang"><select name="lang" onchange="this.form.submit()">
 {% for k,v in langs.items() %}<option value="{{ k }}" {{ "selected" if k==c.lang }}>{{ v }}</option>{% endfor %}</select></form></td>

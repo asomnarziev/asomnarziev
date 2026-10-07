@@ -50,9 +50,10 @@ def lang_markup():
 
 
 def handle_update(db: Session, u: dict) -> None:
-    msg, cb = u.get("message"), u.get("callback_query")
+    msg, cb = u.get("message") or u.get("channel_post"), u.get("callback_query")
     if msg and msg.get("text", "").startswith("/"):
         chat_id = str(msg["chat"]["id"])
+        is_channel = msg["chat"].get("type") == "channel"  # kanalda tugma bosishni hamma ko'ra oladi — til kabinetdan
         cmd, _, arg = msg["text"].partition(" ")
         cmd = cmd.split("@")[0]
         if cmd == "/start" and arg.strip():
@@ -66,8 +67,8 @@ def handle_update(db: Session, u: dict) -> None:
                     return
                 db.add(Chat(account_id=acc.id, chat_id=chat_id, lang=DEFAULT_LANG))
                 db.commit()
-            telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["linked"], lang_markup())
-        elif cmd in ("/start", "/lang"):
+            telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["linked"], None if is_channel else lang_markup())
+        elif cmd in ("/start", "/lang") and not is_channel:
             telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["start"], lang_markup())
     elif cb and cb.get("data", "").startswith("lang:"):
         chat_id, lang = str(cb["message"]["chat"]["id"]), cb["data"][5:]

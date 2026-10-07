@@ -29,4 +29,4 @@ def answer_callback(cb_id, text):
 
 def set_webhook():
     url = f"{config.BASE_URL}/tg/{config.TG_WEBHOOK_SECRET}"
-    return _call("setWebhook", data={"url": url, "allowed_updates": json.dumps(["message", "callback_query"])})
+    return _call("setWebhook", data={"url": url, "allowed_updates": json.dumps(["message", "channel_post", "callback_query"])})

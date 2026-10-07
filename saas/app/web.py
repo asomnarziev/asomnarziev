@@ -5,9 +5,9 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from . import config, service
+from . import config, service, telegram
 from .db import get_db
-from .messages import LANGS
+from .messages import LANGS, TEMPLATES
 from .models import Account, Chat, Payment, User, now
 from .security import encrypt, hash_password, verify_password
 
@@ -108,12 +108,18 @@ def save_pbx(domain: str = Form(...), key: str = Form(""), user: User = Depends(
 def add_chat(chat_id: str = Form(...), lang: str = Form("uz"), user: User = Depends(require_user),
              db: Session = Depends(get_db)):
     acc, chat_id = user.account, chat_id.strip()
-    lstrip = chat_id.lstrip("-")
-    if not lstrip.isdigit() or lang not in LANGS:
-        raise HTTPException(400, "Chat ID raqam bo'lishi kerak")
+    # shaxsiy/guruh/superguruh/kanal: 12345, -100123..., yoki ochiq kanal uchun @username
+    valid = chat_id.lstrip("-").isdigit() or (chat_id.startswith("@") and len(chat_id) > 3)
+    if not valid or lang not in LANGS:
+        raise HTTPException(400, "Chat ID raqam (-100... kanal/guruh) yoki @kanal bo'lishi kerak")
     if len(acc.chats) >= acc.max_chats:
         raise HTTPException(400, "Chatlar limiti tugagan")
     if not any(c.chat_id == chat_id for c in acc.chats):
+        try:  # bot shu chatga yoza olishini darrov tekshiramiz (kanalda bot admin bo'lishi kerak)
+            telegram.send_message(chat_id, TEMPLATES[lang]["lang_set"])
+        except Exception:
+            raise HTTPException(400, "Bot bu chatga yoza olmadi. Shaxsiy chatda avval botga /start yuboring; "
+                                     "guruh/kanalga botni (kanalda admin sifatida) qo'shing.")
         db.add(Chat(account_id=acc.id, chat_id=chat_id, lang=lang))
         db.commit()
     return go("/cabinet")

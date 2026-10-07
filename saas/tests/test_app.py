@@ -40,6 +40,31 @@ def test_register_cabinet_and_isolation(client):
     assert client.get("/admin").status_code == 403
 
 
+@pytest.fixture(autouse=True)
+def fake_tg(monkeypatch):
+    monkeypatch.setattr(telegram, "send_message", lambda *a, **k: None)
+
+
+def test_channel_link_and_username(client, monkeypatch):
+    register(client)
+    msgs = []
+    monkeypatch.setattr(telegram, "send_message", lambda chat, text, markup=None: msgs.append((chat, markup)))
+    with SessionLocal() as db:
+        code = db.query(Account).one().link_code
+    client.post("/tg/tg-secret", json={"channel_post": {"text": f"/start {code}", "chat": {"id": -1009, "type": "channel"}}})
+    assert msgs == [("-1009", None)]  # kanalga til tugmalari yuborilmaydi
+    client.post("/cabinet/chat", data={"chat_id": "@mychannel", "lang": "uz"})
+    with SessionLocal() as db:
+        assert {c.chat_id for c in db.query(Chat)} == {"-1009", "@mychannel"}
+
+
+def test_manual_add_rejected_when_bot_cannot_write(client, monkeypatch):
+    register(client)
+    def boom(*a, **k): raise RuntimeError("403")
+    monkeypatch.setattr(telegram, "send_message", boom)
+    assert client.post("/cabinet/chat", data={"chat_id": "-1005", "lang": "uz"}).status_code == 400
+
+
 def test_chat_limit(client):
     register(client)
     for i in range(5):
