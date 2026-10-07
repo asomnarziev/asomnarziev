@@ -21,7 +21,10 @@
    <div class="field"><label class="l">Parol</label><input name="password" type="password" required placeholder="Parol"></div>
    <button class="full">Kirish</button>
   </form>
-  <p class="muted small" style="margin:16px 0 0">Akkaunt kerakmi? Administrator bilan bog'laning.</p>
+  <div class="contact"><p class="muted small" style="margin:0 0 8px">Akkaunt kerakmi? Administrator bilan bog'laning:</p>
+  <a href="https://t.me/{{ config.CONTACT_TELEGRAM }}" target="_blank" rel="noopener">{{ i("send",15) }}@{{ config.CONTACT_TELEGRAM }}</a>
+  <a href="tel:{{ config.CONTACT_PHONE }}">{{ i("phone",15) }}{{ config.CONTACT_PHONE[:4] }} {{ config.CONTACT_PHONE[4:6] }} {{ config.CONTACT_PHONE[6:9] }} {{ config.CONTACT_PHONE[9:11] }} {{ config.CONTACT_PHONE[11:] }}</a>
+  <a href="mailto:{{ config.CONTACT_EMAIL }}">{{ i("link",15) }}{{ config.CONTACT_EMAIL }}</a></div>
  </div></div>
 </div>
 {% endblock %}

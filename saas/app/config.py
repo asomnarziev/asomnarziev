@@ -6,6 +6,10 @@ BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "")
 TG_WEBHOOK_SECRET = os.environ.get("TG_WEBHOOK_SECRET", "tg-secret")
+# Kirish sahifasida ko'rsatiladigan administrator kontaktlari
+CONTACT_TELEGRAM = os.environ.get("CONTACT_TELEGRAM", "asom_narziev")
+CONTACT_PHONE = os.environ.get("CONTACT_PHONE", "+998948302407")
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "asomnarziev07@gmail.com")
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))
 
 # narx so'mda; days — obuna muddati

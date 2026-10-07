@@ -229,3 +229,9 @@ def test_create_user_cli(client, capsys):
         assert u.is_admin and u.account is not None
     c = TestClient(app)
     assert c.post("/login", data={"email": "boss@x.uz", "password": "yangiparol1"}, follow_redirects=False).headers["location"] == "/cabinet"
+
+
+def test_login_shows_admin_contacts(client):
+    t = TestClient(app).get("/login").text
+    assert "https://t.me/asom_narziev" in t and "tel:+998948302407" in t and "mailto:asomnarziev07@gmail.com" in t
+    assert "+998 94 830 24 07" in t
