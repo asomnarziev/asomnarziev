@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% from "icons.html" import i %}{% set active="calls" %}{% block body %}
+<div class="head"><h1>Qo'ng'iroqlar</h1><p>Qidirish va yozuvni qayta tinglash — Pro tarifda</p></div>
+<div class="card lock">{{ i("lock", 34) }}
+<h3 style="justify-content:center;margin:0 0 6px">Qidiruv Pro tarifda ochiladi</h3>
+<p class="muted" style="max-width:520px;margin:0 auto 14px">Raqam, xodim yoki sana bo'yicha eski qo'ng'iroqni toping, yozuvni brauzerda tinglang yoki yuklab oling, kerak bo'lsa Telegramga qayta yuboring.</p>
+<ul class="muted" style="list-style:none;padding:0;margin:0 0 18px;font:13px var(--mono)">
+<li>✓ Raqam, xodim, yo'nalish, holat, sana bo'yicha qidirish</li><li>✓ Yozuvni saytning o'zida tinglash va yuklab olish</li><li>✓ Yozuvni Telegramga qayta yuborish</li><li>✓ Javobsiz qo'ng'iroq ogohlantirishi darrov Telegramga</li></ul>
+<a class="btn" href="/billing">Pro tarifga o'tish — {{ "{:,}".format(plans.pro.price).replace(",", " ") }} so'm / oy</a></div>
+{% endblock %}

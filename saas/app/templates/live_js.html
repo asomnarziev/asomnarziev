@@ -1,0 +1,43 @@
+<script>
+/* Jonli yangilanish: SSE orqali yangi qo'ng'iroq xabari kelsa, sahifaning #live-area qismi qayta yuklanadi.
+   Foydalanuvchi pleyer ochgan yoki yozuv eshitayotgan bo'lsa, o'zi almashtirmaydi: "Yangilash" tugmasi chiqadi. */
+(function(){
+  if(!window.EventSource) return;
+  var dot=document.getElementById('live-dot'), banner=document.getElementById('live-banner'), pending=0, timer=null, es=null, firstOpen=true;
+  function state(on){ if(dot){ dot.className='live '+(on?'on':'off'); dot.title=on?'Jonli: yangi qo‘ng‘iroqlar o‘zi chiqadi':'Ulanmoqda…'; } }
+  function busy(){
+    var playing=[].some.call(document.querySelectorAll('audio'),function(a){return !a.paused&&!a.ended});
+    return playing||!!document.querySelector('.rec.open');
+  }
+  function ids(){ return [].map.call(document.querySelectorAll('#live-area [data-id]'),function(n){return n.dataset.id}); }
+  function swap(html){
+    var doc=new DOMParser().parseFromString(html,'text/html'), old=ids();
+    ['live-area','live-count'].forEach(function(id){
+      var a=document.getElementById(id), b=doc.getElementById(id); if(a&&b) a.innerHTML=b.innerHTML;
+    });
+    [].forEach.call(document.querySelectorAll('#live-area [data-id]'),function(n){
+      if(old.indexOf(n.dataset.id)<0) n.classList.add("fresh");
+    });
+  }
+  function refresh(){
+    pending=0; if(banner) banner.style.display='none';
+    fetch(location.href,{credentials:'same-origin'}).then(function(r){return r.ok?r.text():Promise.reject()}).then(swap).catch(function(){});
+  }
+  function onCall(){
+    clearTimeout(timer);
+    timer=setTimeout(function(){
+      if(busy()){ pending++; if(banner){ banner.querySelector('span').textContent=pending+' ta yangi qo‘ng‘iroq'; banner.style.display='flex'; } }
+      else refresh();
+    },800);  // ketma-ket kelgan hodisalarni bitta yangilashga jamlaymiz
+  }
+  if(banner) banner.querySelector('button').onclick=refresh;
+  function connect(){
+    es=new EventSource('/live/stream');
+    es.onopen=function(){ state(true); if(!firstOpen) onCall(); firstOpen=false; };  // qayta ulangach: o'tkazib yuborilganini yangilaymiz
+    es.addEventListener('call',onCall);
+    es.onerror=function(){ state(false); };  // brauzer o'zi qayta ulanadi (retry: 3s)
+  }
+  state(false); connect();
+  window.addEventListener('beforeunload',function(){ if(es) es.close(); });
+})();
+</script>

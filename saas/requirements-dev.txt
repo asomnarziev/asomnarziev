@@ -1,0 +1,7 @@
+# Ishlab chiqish va CI uchun: testlar, lint, xavfsizlik tekshiruvi
+-r requirements.txt
+pytest>=8
+httpx>=0.27
+ruff==0.16.10
+bandit>=1.7
+pip-audit>=2.7
