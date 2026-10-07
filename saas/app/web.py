@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -164,7 +165,9 @@ def checkout(plan: str = Form(...), user: User = Depends(require_user), db: Sess
 def admin_page(request: Request, db: Session, user: User, error=None, created=None):
     return render(request, "admin.html", user=user, now=now(), error=error, created=created,
                   accounts=db.query(Account).order_by(Account.id.desc()).all(),
-                  payments=db.query(Payment).filter_by(status="pending").all())
+                  payments=db.query(Payment).filter_by(status="pending").all(),
+                  history=db.query(Payment).filter(Payment.status == "paid").order_by(Payment.id.desc()).limit(20).all(),
+                  plans=config.PLANS)
 
 
 @router.get("/admin")
@@ -190,6 +193,28 @@ def admin_create_user(request: Request, email: str = Form(...), password: str = 
     db.add(user)
     db.commit()
     return admin_page(request, db, admin, created=(email, password))
+
+
+@router.post("/admin/account/{aid}/subscription")
+def admin_subscription(aid: int, action: str = Form(...), plan: str = Form("start"), days: int = Form(30),
+                       _: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Obunani qo'lda boshqarish: uzaytirish (tarif bilan) yoki darrov tugatish. Har amal Payment (provider=admin) bilan yoziladi."""
+    acc = db.get(Account, aid)
+    if not acc:
+        raise HTTPException(404)
+    if action == "extend":
+        if plan not in config.PLANS or not 1 <= days <= 3650:
+            raise HTTPException(400, "Tarif noto'g'ri yoki kunlar 1..3650 oralig'ida emas")
+        acc.paid_until = max(acc.paid_until or now(), now()) + timedelta(days=days)
+        acc.plan = plan
+        db.add(Payment(account_id=acc.id, plan=plan, amount=0, provider="admin", status="paid"))
+    elif action == "expire":
+        acc.paid_until = now()
+        acc.trial_ends = now()
+    else:
+        raise HTTPException(400)
+    db.commit()
+    return go("/admin")
 
 
 @router.post("/admin/account/{aid}/password")

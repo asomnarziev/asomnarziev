@@ -18,10 +18,25 @@
 {% else %}<tr><td class="empty">{{ i("check",26) }}Kutilayotgan to'lov yo'q</td></tr>{% endfor %}</tbody></table></div></div>
 
 <div class="card"><div class="ch"><span class="ico">{{ i("users") }}</span>Mijozlar</div><div class="scroll" style="margin-top:10px"><table class="tbl">
-<thead><tr><th>Email</th><th class="hide-sm">PBX</th><th>Chat</th><th>Gacha</th><th>Parol</th><th></th></tr></thead><tbody>
-{% for a in accounts %}<tr><td>{{ a.user.email }}{% if a.suspended %} <span class="badge err">to'xtatilgan</span>{% endif %}</td>
-<td class="muted hide-sm">{{ a.pbx_domain or "—" }}</td><td>{{ a.chats|length }}</td>
-<td>{{ a.valid_until.strftime("%d.%m.%Y") }}</td>
-<td><form method="post" action="/admin/account/{{ a.id }}/password" class="row" style="flex-wrap:nowrap"><input class="sm" name="password" placeholder="yangi parol" minlength="8" required size="10"><button class="ghost sm">O'rnatish</button></form></td>
-<td><form method="post" action="/admin/account/{{ a.id }}/suspend"><button class="{{ 'sm' if a.suspended else 'danger sm' }}">{{ "Yoqish" if a.suspended else "To'xtatish" }}</button></form></td></tr>{% endfor %}</tbody></table></div></div>
+<thead><tr><th>Email</th><th class="hide-sm">PBX</th><th>Chat</th><th>Tarif</th><th>Holat</th><th></th></tr></thead><tbody>
+{% for a in accounts %}<tr><td>{{ a.user.email }}</td>
+<td class="muted hide-sm">{{ a.pbx_domain or "—" }}</td><td>{{ a.chats|length }}/{{ a.max_chats }}</td>
+<td>{% if a.paid_until and a.paid_until > now %}<span class="badge">{{ plans[a.plan].name }}</span>{% else %}<span class="muted">sinov</span>{% endif %}</td>
+<td>{% if a.suspended %}<span class="badge err">to'xtatilgan</span>{% elif a.active %}<span class="badge ok">{{ a.valid_until.strftime("%d.%m.%Y") }}</span>{% else %}<span class="badge err">tugagan {{ a.valid_until.strftime("%d.%m.%Y") }}</span>{% endif %}</td>
+<td style="text-align:right"><details class="mg"><summary class="btn ghost sm" style="display:inline-flex">Boshqarish</summary>
+<div class="mgbox">
+<form method="post" action="/admin/account/{{ a.id }}/subscription" class="row"><b class="small">Obuna:</b>
+<select class="sm" name="plan">{% for k,p in plans.items() %}<option value="{{ k }}" {{ "selected" if k==a.plan }}>{{ p.name }}</option>{% endfor %}</select>
+<input class="sm" type="number" name="days" value="30" min="1" max="3650" style="width:76px"><span class="muted small">kun</span>
+<button class="sm" name="action" value="extend">Uzaytirish</button>
+<button class="danger sm" name="action" value="expire" onclick="return confirm('Obuna darrov tugatilsinmi?')">Tugatish</button></form>
+<form method="post" action="/admin/account/{{ a.id }}/password" class="row"><b class="small">Parol:</b><input class="sm" name="password" placeholder="yangi parol" minlength="8" required size="12"><button class="ghost sm">O'rnatish</button></form>
+<form method="post" action="/admin/account/{{ a.id }}/suspend" class="row"><b class="small">Akkaunt:</b><button class="{{ 'sm' if a.suspended else 'danger sm' }}">{{ "Yoqish" if a.suspended else "To'xtatish" }}</button></form>
+</div></details></td></tr>{% endfor %}</tbody></table></div></div>
+
+<div class="card"><div class="ch"><span class="ico">{{ i("clock") }}</span>Obuna tarixi</div><div class="scroll" style="margin-top:10px"><table class="tbl">
+<thead><tr><th>Sana (UTC)</th><th>Mijoz</th><th>Tarif</th><th class="hide-sm">Summa</th><th>Manba</th></tr></thead><tbody>
+{% for p in history %}<tr><td>{{ p.created_at.strftime("%d.%m.%Y %H:%M") }}</td><td>{{ p.account.user.email }}</td><td><span class="badge">{{ p.plan }}</span></td>
+<td class="hide-sm">{{ "{:,}".format(p.amount).replace(",", " ") if p.amount else "—" }}</td><td class="muted">{{ "admin" if p.provider=="admin" else "to'lov" }}</td></tr>
+{% else %}<tr><td colspan="5" class="empty">Hali obuna yozuvlari yo'q</td></tr>{% endfor %}</tbody></table></div></div>
 {% endblock %}
