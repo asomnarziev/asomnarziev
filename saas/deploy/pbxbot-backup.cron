@@ -1,2 +1,3 @@
-# Kunlik zaxira, 03:15 da. O'rnatish:  cp /opt/pbxbot/saas/deploy/pbxbot-backup.cron /etc/cron.d/pbxbot-backup
-15 3 * * * root /bin/bash /opt/pbxbot/saas/deploy/backup.sh >> /var/log/pbxbot-backup.log 2>&1
+# Kunlik zaxira: 18:59 UTC = 23:59 Toshkent (UTC+5). Server vaqt mintaqasi UTC bo'lishi kerak: `timedatectl` bilan tekshiring
+# (boshqacha bo'lsa, soatni moslang). O'rnatish:  cp /opt/pbxbot/saas/deploy/pbxbot-backup.cron /etc/cron.d/pbxbot-backup
+59 18 * * * root /bin/bash /opt/pbxbot/saas/deploy/backup.sh >> /var/log/pbxbot-backup.log 2>&1

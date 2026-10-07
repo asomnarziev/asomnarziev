@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from . import reports, telegram
+from . import reports, restore, telegram
 from .db import SessionLocal
 from .messages import DEFAULT_LANG, LANGS, LOCAL_TZ
 from .models import Account
@@ -61,6 +61,9 @@ def _loop(stop: threading.Event) -> None:
     stop.wait(5)
     while not stop.is_set():
         try:
+            if restore.is_maintenance():  # baza almashtirilayotganda tegmaymiz
+                stop.wait(10)
+                continue
             with SessionLocal() as db:
                 run_due(db)
         except Exception:

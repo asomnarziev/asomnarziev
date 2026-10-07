@@ -23,7 +23,7 @@ chown -R pbxbot:pbxbot $APP; chmod 600 $APP/saas/.env
 cp $APP/saas/deploy/pbxbot.service /etc/systemd/system/
 systemctl daemon-reload && systemctl enable --now pbxbot
 
-# Kunlik zaxira (03:15)
+# Kunlik zaxira (23:59 Toshkent) va Telegramga shifrlab yuborish
 cp $APP/saas/deploy/pbxbot-backup.cron /etc/cron.d/pbxbot-backup
 chmod 644 /etc/cron.d/pbxbot-backup
 

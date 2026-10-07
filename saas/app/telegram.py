@@ -78,6 +78,20 @@ def send_file(chat_id, caption, data: bytes, filename: str, mime: str, markup=No
     return _call(method, data=form, files={field: (filename, data, mime)})
 
 
+def send_document(chat_id, data: bytes, filename: str, caption: str = "") -> int:
+    """Faylni (masalan, shifrlangan zaxira) yuboradi va xabar ID'sini qaytaradi (keyin o'chirish uchun)."""
+    res = _call(
+        "sendDocument",
+        data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
+        files={"document": (filename, data, "application/octet-stream")},
+    )
+    return res["result"]["message_id"]
+
+
+def delete_message(chat_id, message_id: int):
+    return _call("deleteMessage", data={"chat_id": chat_id, "message_id": message_id})
+
+
 def answer_callback(cb_id, text):
     return _call("answerCallbackQuery", data={"callback_query_id": cb_id, "text": text})
 

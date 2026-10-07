@@ -53,6 +53,9 @@
 </div></details>{% endfor %}
 </div></div>
 
+<div class="card"><div class="ch"><span class="ico">{{ i("download") }}</span>Zaxira va tiklash</div>
+<p class="sub">Zaxira har kuni 23:59 da Telegramga keladi. Bazani zaxiradan qaytarish uchun:</p><a class="btn" href="/admin/restore">Bazani tiklash</a></div>
+
 <div class="card"><div class="ch"><span class="ico">{{ i("clock") }}</span>Obuna tarixi</div><div class="scroll" style="margin-top:10px"><table class="tbl">
 <thead><tr><th>Sana (UTC)</th><th>Mijoz</th><th>Tarif</th><th class="hide-sm">Summa</th><th>Manba</th></tr></thead><tbody>
 {% for p in history %}<tr><td>{{ p.created_at.strftime("%d.%m.%Y %H:%M") }}</td><td>{{ p.account.user.email }}</td><td><span class="badge">{{ p.plan }}</span></td>

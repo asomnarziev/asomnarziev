@@ -36,7 +36,7 @@ if [ -z "${SKIP_RELOAD:-}" ]; then
     systemctl reload nginx
     echo "OK: $(grep -c set_real_ip_from "$OUT") ta diapazon, nginx qayta yuklandi"
   else
-    [ -f "$OUT.bak" ] && mv "$OUT.bak" "$OUT" || rm -f "$OUT"
+    if [ -f "$OUT.bak" ]; then mv "$OUT.bak" "$OUT"; else rm -f "$OUT"; fi
     echo "XATO: nginx sozlamasi yaroqsiz, o'zgarish bekor qilindi" >&2
     exit 1
   fi

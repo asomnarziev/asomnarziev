@@ -9,9 +9,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import __version__, config, hooks, scheduler, web
+from . import __version__, config, hooks, restore, scheduler, web
 from .db import SessionLocal, init_db
-from .middleware import OriginCheckMiddleware, SecurityHeadersMiddleware
+from .middleware import MaintenanceMiddleware, OriginCheckMiddleware, SecurityHeadersMiddleware
 
 # Ilova loglari (INFO) journal'ga tushishi uchun: uvicorn faqat o'z loglarini sozlaydi
 logging.basicConfig(level=config.LOG_LEVEL, format="%(levelname)s %(name)s: %(message)s")
@@ -41,6 +41,7 @@ app.add_middleware(
     https_only=https,
     max_age=14 * 24 * 3600,
 )
+app.add_middleware(MaintenanceMiddleware, is_active=restore.is_maintenance)
 app.add_middleware(OriginCheckMiddleware, extra_hosts=(urlsplit(config.BASE_URL).netloc,))
 app.add_middleware(SecurityHeadersMiddleware, hsts=https)
 

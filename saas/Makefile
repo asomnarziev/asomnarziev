@@ -16,6 +16,7 @@ test:  ## testlar
 lint:  ## lint va formatlash tekshiruvi (o'zgartirmaydi)
 	$(PY) -m ruff check .
 	$(PY) -m ruff format --check .
+	$(VENV)/bin/shellcheck deploy/*.sh
 
 fmt:  ## avtomatik tuzatish va formatlash
 	$(PY) -m ruff check . --fix
