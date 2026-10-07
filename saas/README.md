@@ -1,25 +1,89 @@
-# PBX → Telegram (SaaS)
+# PBX → Telegram
 
-FastAPI + PostgreSQL. Har mijoz o'z OnlinePBX stansiyasini ulaydi, qo'ng'iroq yozuvlari uning Telegram chatlariga (har chat o'z tilida: uz/ru) yuboriladi. Bitta umumiy bot.
+OnlinePBX qo'ng'iroq yozuvlarini mijozning Telegram chatlariga (shaxsiy chat, guruh, kanal) tayyor shablon bilan, **o'zbek yoki rus tilida** yuboruvchi ko'p mijozli (SaaS) xizmat. Pro tarifda hisobotlar, qidiruv va ogohlantirishlar bor.
 
-## Oqim
-1. Admin mijoz akkauntini yaratadi (sinov muddati `TRIAL_DAYS`), mijoz kiradi → kabinetda OnlinePBX domeni va API kalitini kiritadi (kalit Fernet bilan shifrlanadi).
-2. Kabinetdagi webhook manzili (`/hook/<token>`) OnlinePBX'ga kiritiladi.
-3. Chat ulash: kabinetdagi `t.me/<bot>?start=<kod>` havolasi (guruhda `/start@bot <kod>`) yoki Chat ID'ni qo'lda kiritish. Til faqat kabinetda tanlanadi (Telegramda til tugmalari yo'q).
-4. Webhook kelganda: yozuv OnlinePBX API'dan olinadi va akkauntning barcha chatlariga shablon bo'yicha yuboriladi (takror uuid e'tiborsiz).
-5. Obuna tugasa yuborish to'xtaydi; tarif `config.py` dagi `PLANS`.
-
-## Ishga tushirish
 ```
-pip install -r requirements.txt
-cp .env.example .env   # to'ldiring, so'ng: set -a; . ./.env; set +a
-python -c "from app import telegram; print(telegram.set_webhook())"   # Telegram webhook
-uvicorn app.main:app
-pytest
+ OnlinePBX ──webhook──▶  FastAPI (uvicorn)  ──▶  Telegram Bot API ──▶ mijoz chatlari
+ (har mijozning            │      │   │
+  o'z domeni, kaliti)      │      │   └─ fon vazifalari: kunlik hisobot (scheduler), eski tarixni yuklash
+                           │      └──── PostgreSQL: mijozlar, chatlar, qo'ng'iroqlar, to'lovlar
+                           └─ brauzer: kabinet, hisobotlar, qidiruv, admin (SSE bilan jonli yangilanish)
 ```
-Ro'yxatdan o'tish yo'q: birinchi admin `python -m app.create_user email PAROL --admin` bilan yaratiladi, keyin mijozlar `/admin` dan qo'shiladi.
 
-## Hali qilinmagan / tekshirilmagan
-- **To'lov**: Click/Payme integratsiyasi yo'q. Hozir mijoz so'rov yuboradi, admin `/admin` da qo'lda tasdiqlaydi (`service.confirm_payment` tayyor — provayder callback'i shuni chaqirishi kerak).
-- **OnlinePBX webhook formati va API** (`pbx.py`) real stansiyada sinalmagan; webhook qaysi hodisada (qo'ng'iroq tugaganda, yozuv tayyor bo'lgach) kelishini tekshiring.
-- Alembic migratsiyalari, parolni tiklash, email tasdiqlash, rate-limit, CSRF token yo'q (hozircha faqat SameSite=Lax cookie).
+## Imkoniyatlar
+
+| | Sinov (7 kun) | Start | Pro |
+|---|:-:|:-:|:-:|
+| Qo'ng'iroq yozuvi Telegramga (uz/ru shablon, har chat o'z tilida) | ✓ | ✓ | ✓ |
+| Chatlar soni | 3 | 3 | 20 |
+| Hisobotlar (kunlar, soatlar, xodimlar), CSV eksport, eski tarixni yuklash | | | ✓ |
+| Kunlik hisobot Telegramga | | | ✓ |
+| Javobsiz qo'ng'iroq ogohlantirishi | | | ✓ |
+| Qo'ng'iroqlarni qidirish, yozuvni tinglash/qayta yuborish | | | ✓ |
+| Jonli yangilanish (sahifa o'zi yangilanadi) | | | ✓ |
+
+Tarif narxlari va limitlari: [`app/config.py`](app/config.py) (`PLANS`). Mijozlarni administrator yaratadi (ommaviy ro'yxatdan o'tish yo'q), to'lov kartaga o'tkazma + chek orqali, administrator Telegramdan bir tugma bilan tasdiqlaydi.
+
+## Tuzilma
+
+```
+app/
+  main.py          ASGI ilova: middleware, marshrutlar, /healthz
+  config.py        sozlamalar (muhit o'zgaruvchilari) va tarif jadvali
+  models.py        SQLAlchemy modellari (User, Account, Chat, CallLog, Payment)
+  db.py            ulanish va yengil migratsiya (init_db)
+  hooks.py         OnlinePBX va Telegram webhook'lari
+  service.py       asosiy mantiq: qo'ng'iroqni qayta ishlash, to'lovlar, tarixni yuklash
+  pbx.py           OnlinePBX API mijozi (kesh, tezlik chegarasi, qayta urinish)
+  telegram.py      Telegram Bot API
+  reports.py       statistika, grafiklar (SVG), CSV, kunlik hisobot matni
+  scheduler.py     fon: kunlik hisobot
+  live.py          jonli yangilanish (SSE) hodisalar markazi
+  middleware.py    xavfsizlik sarlavhalari, CSRF (Origin) tekshiruvi
+  ratelimit.py     kirishdagi brute-force himoyasi
+  security.py      parol xeshi, shifrlash;  receipts.py — cheklarni xavfsiz saqlash
+  web/             sahifalar: auth, cabinet, billing, analytics, calls, stream, admin
+  templates/       Jinja2 shablonlari (tashqi kutubxonasiz, qorong'i/yorug' rejim)
+deploy/            install.sh, update.sh, backup.sh, systemd, nginx
+tests/             pytest (mavzu bo'yicha modullar; conftest.py — umumiy fixturalar)
+```
+
+## Lokal ishlab chiqish
+
+```bash
+make install     # .venv va bog'liqliklar
+make test        # testlar
+make check       # lint + format + testlar + xavfsizlik (CI shuni bajaradi)
+make run         # http://localhost:8000  (SQLite, scheduler o'chiq)
+python -m app.create_user siz@mail.uz PAROL --admin   # birinchi admin
+```
+
+`make fmt` kodni avtomatik tuzatadi va formatlaydi. CI: [`.github/workflows/saas-ci.yml`](../.github/workflows/saas-ci.yml).
+
+## Ishga tushirish va ishlatish
+
+To'liq qo'llanma: **[DEPLOY.md](DEPLOY.md)** (o'rnatish, yangilash, zaxira, diagnostika, muammolar). Qisqacha:
+
+```bash
+bash /opt/pbxbot/saas/deploy/update.sh      # yangilash (kod, bog'liqliklar, restart, sog'liq tekshiruvi)
+bash /opt/pbxbot/saas/deploy/backup.sh      # zaxira (har kuni 03:15 o'zi ham ishlaydi)
+curl http://127.0.0.1:8000/healthz          # holat: baza, scheduler, versiya
+journalctl -u pbxbot -f                     # loglar
+```
+
+## Xavfsizlik
+
+- Parollar `scrypt` bilan xeshlanadi; OnlinePBX API kalitlari `SECRET_KEY` bilan shifrlangan holda saqlanadi.
+- Sessiya cookie: `HttpOnly`, `SameSite=Lax`, HTTPS'da `Secure`; CSRF — Origin/Referer tekshiruvi (webhook'lardan tashqari).
+- Kirishda brute-force himoyasi (email va IP bo'yicha), foydalanuvchi mavjudligi xabarda oshkor bo'lmaydi.
+- Xavfsizlik sarlavhalari (CSP, `X-Frame-Options`, HSTS, ...); API hujjat sahifalari o'chirilgan.
+- Har mijoz faqat o'z ma'lumotini ko'radi; cheklar faqat egasi va administratorga (fayl turi mazmuniga qarab tekshiriladi).
+- OnlinePBX API limitlaridan himoya: kalit keshi, tezlik chegarasi, 429 da kutish, noto'g'ri kalit uchun tanaffus.
+- Yozuv fayllari serverda saqlanmaydi (OnlinePBX'dan oqim sifatida uzatiladi).
+
+## Cheklovlar va keyingi qadamlar
+
+- Ilova **bitta jarayon**da ishlaydi (jonli yangilanish va scheduler xotirada). Ko'p worker uchun hodisalar Redis orqali uzatilishi kerak.
+- Migratsiyalar yengil (`db.init_db`: yangi ustunlarni qo'shadi). Ustun o'chirish/o'zgartirish kerak bo'lsa — Alembic'ga o'tish.
+- To'lov hozircha kartaga o'tkazma + qo'lda tasdiqlash; Click/Payme avtomatik integratsiyasi yo'q.
+- OnlinePBX API javob formati real stansiyada tekshirilgan (qo'ng'iroq ma'lumoti, yozuv, tarix); rasmiy limitlar noma'lum, shuning uchun hammasi `.env` orqali sozlanadi.

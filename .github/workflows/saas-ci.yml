@@ -1,0 +1,33 @@
+name: saas-ci
+
+on:
+  push:
+    paths: ["saas/**", ".github/workflows/saas-ci.yml"]
+  pull_request:
+    paths: ["saas/**", ".github/workflows/saas-ci.yml"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: saas
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: saas/requirements-dev.txt
+      - name: Bog'liqliklarni o'rnatish
+        run: pip install -r requirements-dev.txt -c constraints.txt
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format tekshiruvi (ruff)
+        run: ruff format --check .
+      - name: Testlar
+        run: pytest -q
+      - name: Xavfsizlik (bandit)
+        run: bandit -q -r app
+      - name: Bog'liqliklar zaifligi (pip-audit)
+        run: pip-audit -r requirements.txt

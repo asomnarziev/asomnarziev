@@ -1,14 +1,31 @@
 [Unit]
 Description=PBX to Telegram SaaS
 After=network.target postgresql.service
+Wants=postgresql.service
 
 [Service]
 User=pbxbot
+Group=pbxbot
 WorkingDirectory=/opt/pbxbot/saas
 EnvironmentFile=/opt/pbxbot/saas/.env
-ExecStart=/opt/pbxbot/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips=127.0.0.1
+# Bitta worker: jonli yangilanish va kunlik hisobot jarayon xotirasida ishlaydi
+ExecStart=/opt/pbxbot/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1 --no-server-header
 Restart=always
 RestartSec=3
+TimeoutStopSec=20
+LimitNOFILE=4096
+
+# Himoya: ilova ruxsatlari cheklangan (root emas, tizim fayllariga yozolmaydi)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
 
 [Install]
 WantedBy=multi-user.target

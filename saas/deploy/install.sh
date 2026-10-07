@@ -5,7 +5,7 @@ APP=/opt/pbxbot
 [ -f "$APP/saas/.env" ] || { echo "Avval $APP/saas/.env ni to'ldiring (.env.example dan nusxa)"; exit 1; }
 
 apt-get update
-apt-get install -y python3 python3-venv postgresql nginx certbot python3-certbot-nginx
+apt-get install -y python3 python3-venv postgresql nginx certbot python3-certbot-nginx curl cron
 id pbxbot &>/dev/null || useradd --system --home $APP --shell /usr/sbin/nologin pbxbot
 
 # Postgres: parol .env dagi DATABASE_URL dan olinadi
@@ -22,4 +22,10 @@ chown -R pbxbot:pbxbot $APP; chmod 600 $APP/saas/.env
 
 cp $APP/saas/deploy/pbxbot.service /etc/systemd/system/
 systemctl daemon-reload && systemctl enable --now pbxbot
-echo "Tayyor. Keyin: nginx.conf ni sozlang, certbot ishga tushiring, setup_webhook ni bajaring (DEPLOY.md)."
+
+# Kunlik zaxira (03:15)
+cp $APP/saas/deploy/pbxbot-backup.cron /etc/cron.d/pbxbot-backup
+chmod 644 /etc/cron.d/pbxbot-backup
+
+echo "Xizmat ishga tushdi. Tekshirish: curl http://127.0.0.1:8000/healthz"
+echo "Keyin: nginx.conf, certbot, setup_webhook, birinchi admin (DEPLOY.md)."

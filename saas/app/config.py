@@ -20,7 +20,8 @@ def _flag(name: str, default: bool = True) -> bool:
 
 
 # ---------- Asosiy ----------
-DEV_SECRET_KEY = "dev-secret-change-me"  # noqa: S105  # nosec B105 - productionda ishlatilsa ilova ishga tushmaydi (pastda)
+# Dev standartlari: HTTPS (production) rejimida ishlatilsa ilova ishga tushmaydi (pastdagi tekshiruv)
+DEV_SECRET_KEY = "dev-secret-change-me"  # noqa: S105  # nosec B105
 DEV_WEBHOOK_SECRET = "tg-secret"  # noqa: S105  # nosec B105
 SECRET_KEY = _env("SECRET_KEY", DEV_SECRET_KEY)  # sessiya imzosi va OnlinePBX kalitlarini shifrlash uchun
 DATABASE_URL = _env("DATABASE_URL", "sqlite:///./saas.db")

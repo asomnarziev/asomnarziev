@@ -101,7 +101,8 @@ class PbxClient:
         GLOBAL_GATE.wait()
 
     def _backoff(self, attempt: int, retry_after: float | None):
-        delay = retry_after if retry_after is not None else min(60, 2 ** (attempt + 1)) + random.random()  # noqa: S311  # nosec B311 - jitter, kriptografiya emas
+        # random: kutish vaqtiga tasodifiy qo'shimcha (jitter), kriptografiya emas
+        delay = retry_after if retry_after is not None else min(60, 2 ** (attempt + 1)) + random.random()  # noqa: S311  # nosec B311
         self.gate.penalize(delay)
         _sleep(delay)
 
