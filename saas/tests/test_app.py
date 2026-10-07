@@ -193,3 +193,13 @@ def test_pbx_client_requires_config_and_tries_hosts(monkeypatch):
     monkeypatch.setattr(c.s, "post", lambda url, **kw: (urls.append(url), R(len(urls) > 1))[1])
     c._auth()
     assert urls[0].startswith("https://api.onlinepbx.ru/d.onpbx.ru/") and c.base.startswith("https://api2.")
+
+
+def test_webhook_without_uuid_is_ok(client):
+    register(client)
+    with SessionLocal() as db:
+        token = db.query(Account).one().hook_token
+    r = client.post(f"/hook/{token}", data={"event": "test"})
+    assert r.status_code == 200 and r.json()["ignored"] is True
+    with SessionLocal() as db:
+        assert db.query(Account).one().logs == []  # log qatori yaratilmaydi

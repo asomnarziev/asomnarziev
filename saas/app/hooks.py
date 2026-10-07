@@ -36,7 +36,10 @@ async def pbx_hook(token: str, request: Request, bg: BackgroundTasks, db: Sessio
             pass
     uuid = str(data.get("uuid") or data.get("call_id") or "")[:100]
     if not uuid:
-        raise HTTPException(400, "uuid yo'q")
+        # OnlinePBX "Тест" so'rovi uuid'siz keladi; 4xx qaytarsak webhook "buzuq" deb belgilanadi
+        log.info("webhook without uuid ignored, fields: %s", sorted(data))
+        return {"ok": True, "ignored": True}
+    log.info("webhook uuid=%s fields=%s", uuid, sorted(data))
     bg.add_task(_bg_call, acc.id, uuid)
     return {"ok": True}
 
