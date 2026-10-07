@@ -47,11 +47,15 @@ def index(user: User | None = Depends(current_user)):
 
 @router.get("/register")
 def register_form(request: Request):
+    if not config.OPEN_REGISTRATION:
+        return render(request, "auth.html", mode="closed", error=None)
     return render(request, "auth.html", mode="register", error=None)
 
 
 @router.post("/register")
 def register(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    if not config.OPEN_REGISTRATION:
+        raise HTTPException(403, "Ro'yxatdan o'tish yopiq")
     email = email.strip().lower()
     if len(password) < 8:
         return render(request, "auth.html", mode="register", error="Parol kamida 8 belgi")
@@ -181,11 +185,46 @@ def checkout(plan: str = Form(...), user: User = Depends(require_user), db: Sess
     return go("/billing")
 
 
-@router.get("/admin")
-def admin(request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    return render(request, "admin.html", user=user, now=now(),
+def admin_page(request: Request, db: Session, user: User, error=None, created=None):
+    return render(request, "admin.html", user=user, now=now(), error=error, created=created,
                   accounts=db.query(Account).order_by(Account.id.desc()).all(),
                   payments=db.query(Payment).filter_by(status="pending").all())
+
+
+@router.get("/admin")
+def admin(request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return admin_page(request, db, user)
+
+
+@router.post("/admin/user")
+def admin_create_user(request: Request, email: str = Form(...), password: str = Form(...),
+                      admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    email = email.strip().lower()
+    err = None
+    if len(password) < 8:
+        err = "Parol kamida 8 belgi"
+    elif not email or "@" not in email:
+        err = "Email noto'g'ri"
+    elif db.query(User).filter_by(email=email).first():
+        err = "Bu email band"
+    if err:
+        return admin_page(request, db, admin, error=err)
+    user = User(email=email, password_hash=hash_password(password))
+    user.account = Account()
+    db.add(user)
+    db.commit()
+    return admin_page(request, db, admin, created=(email, password))
+
+
+@router.post("/admin/account/{aid}/password")
+def admin_set_password(aid: int, password: str = Form(...), _: User = Depends(require_admin),
+                       db: Session = Depends(get_db)):
+    acc = db.get(Account, aid)
+    if not acc or len(password) < 8:
+        raise HTTPException(400, "Akkaunt topilmadi yoki parol 8 belgidan qisqa")
+    acc.user.password_hash = hash_password(password)
+    db.commit()
+    return go("/admin")
 
 
 @router.post("/admin/payment/{pid}/confirm")

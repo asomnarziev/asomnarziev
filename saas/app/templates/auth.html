@@ -1,8 +1,9 @@
 {% extends "base.html" %}{% block body %}
+{% if mode=="closed" %}<h1>Ro'yxatdan o'tish yopiq</h1><p>Akkaunt olish uchun administrator bilan bog'laning.</p><p><a href="/login">Kirish</a></p>{% else %}
 <h1>{{ "Ro'yxatdan o'tish" if mode=="register" else "Kirish" }}</h1>
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
 <form method="post"><p><input name="email" type="email" placeholder="Email" required></p>
 <p><input name="password" type="password" placeholder="Parol" required minlength="8"></p>
 <button>{{ "Ro'yxatdan o'tish" if mode=="register" else "Kirish" }}</button></form>
 <p>{% if mode=="register" %}<a href="/login">Akkaunt bormi? Kirish</a>{% else %}<a href="/register">Ro'yxatdan o'tish</a>{% endif %}</p>
-{% endblock %}
+{% endif %}{% endblock %}

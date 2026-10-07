@@ -20,6 +20,8 @@ def client():
 
 
 def register(c, email="a@x.uz"):
+    from app import config
+    config.OPEN_REGISTRATION = True
     return c.post("/register", data={"email": email, "password": "12345678"}, follow_redirects=False)
 
 
@@ -137,3 +139,21 @@ def test_each_tenant_has_own_hook_and_regenerate(client):
     client.post("/cabinet/hook/regenerate")
     assert h1 not in client.get("/cabinet").text
     assert client.post(f"/hook/{h1}", data={"uuid": "x"}).status_code == 404
+
+
+def test_admin_creates_customer_and_registration_closed(client, monkeypatch):
+    from app import config
+    monkeypatch.setattr(config, "OPEN_REGISTRATION", True)
+    register(client, "admin@x.uz")  # ADMIN_EMAIL
+    monkeypatch.setattr(config, "OPEN_REGISTRATION", False)
+    assert "yopiq" in TestClient(app).get("/register").text
+    assert TestClient(app).post("/register", data={"email": "z@x.uz", "password": "12345678"}).status_code == 403
+    r = client.post("/admin/user", data={"email": "cust@x.uz", "password": "parol12345"})
+    assert "parol12345" in r.text
+    cust = TestClient(app)
+    assert cust.post("/login", data={"email": "cust@x.uz", "password": "parol12345"}, follow_redirects=False).headers["location"] == "/cabinet"
+    assert cust.get("/admin").status_code == 403
+    assert "band" in client.post("/admin/user", data={"email": "cust@x.uz", "password": "parol12345"}).text
+    aid = 2
+    client.post(f"/admin/account/{aid}/password", data={"password": "yangiparol1"})
+    assert TestClient(app).post("/login", data={"email": "cust@x.uz", "password": "yangiparol1"}, follow_redirects=False).headers["location"] == "/cabinet"

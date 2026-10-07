@@ -49,3 +49,8 @@ Docker variant ham bor: `docker-compose.yml` (bu hujjatning o'rniga).
 ## Mijozlar (tenantlar) va webhook
 Har mijoz ro'yxatdan o'tganda o'z akkaunti va noyob webhook manzilini oladi: `https://pbx.atcpbx.uz/hook/<uning-tokeni>`.
 Mijoz uni kabinetdan nusxalab OnlinePBX'ga kiritadi; manzil oshkor bo'lsa kabinetda qayta yaratadi.
+
+## Mijoz qo'shish
+`OPEN_REGISTRATION=0` (standart) bo'lsa `/register` yopiq: admin `/admin` → "Mijoz qo'shish" da email va parol qo'yib akkaunt yaratadi, ma'lumotni mijozga beradi.
+Parolni `/admin` jadvalidan almashtirsa bo'ladi. Hamma ro'yxatdan o'tsin desangiz `.env` ga `OPEN_REGISTRATION=1` yozing.
+Yangilash: `cd /opt/pbxbot && git pull && venv/bin/pip install -r saas/requirements.txt && systemctl restart pbxbot`

@@ -7,6 +7,8 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "")
 TG_WEBHOOK_SECRET = os.environ.get("TG_WEBHOOK_SECRET", "tg-secret")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").lower()
+# 0/false bo'lsa /register yopiq, mijozni faqat admin yaratadi
+OPEN_REGISTRATION = os.environ.get("OPEN_REGISTRATION", "0").lower() in ("1", "true", "yes")
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))
 
 # narx so'mda; days — obuna muddati
