@@ -109,3 +109,11 @@ Ikkalasi ham faqat **Pro** tarifda (`features`: `missed_alerts`, `search`).
 - Faqat **bitta uvicorn worker** bilan ishlaydi (hodisalar jarayon xotirasida). Hozirgi systemd sozlamasi shunday.
 - nginx: javobdagi `X-Accel-Buffering: no` sarlavhasi bufferlashni o'zi o'chiradi, qo'shimcha sozlash odatda kerak emas. Agar "jonli" nuqta yonmasa, `location /` ga `proxy_buffering off; proxy_http_version 1.1; proxy_read_timeout 1h;` qo'shing va `nginx -s reload` qiling.
 - Ulanish uzilsa brauzer 3 soniyada o'zi qayta ulanadi va o'tkazib yuborilganini yangilaydi.
+
+## Eski qo'ng'iroqlarni yuklash (Pro)
+Hisobotlar sahifasida **"Oxirgi 30 kunni yuklash"** tugmasi: OnlinePBX tarixidan eski qo'ng'iroqlar **ma'lumoti** (kim, kimga, yo'nalish, vaqt, davomiylik) hisobot va qidiruvga qo'shiladi. **Yozuv fayllari serverga saqlanmaydi**: ularni Telegramdan eshitish yoki Qo'ng'iroqlar sahifasida "Tinglash" bosilganda OnlinePBX'dan oqim sifatida olinadi (diskka yozilmaydi).
+- Kunma-kun so'raladi (API tezlik chegarasi bilan, 30 kun ~ 20-30 soniya); javob 500 qatordan oshsa oyna ikkiga bo'linadi (API qirqib tashlamasligi uchun). Bir yuklashda 20 000 qatorgacha.
+- Takror yuklash xavfsiz: bor qo'ng'iroq ikki marta qo'shilmaydi. Muvaffaqiyatli yuklashdan keyin 10 daqiqa tanaffus.
+- Yuklangan qatorlar "oxirgi webhook" ro'yxatiga va kunlik limitga ta'sir qilmaydi (`status = imported`).
+- Birinchi marta yuklaganda natijani tekshiring: `journalctl -u pbxbot | grep history`. OnlinePBX tarix API'si kutilganidan boshqacha javob bersa, kabinetda sababi yoziladi.
+- Xotira: har qo'ng'iroq ~200 bayt (kuniga 1000 ta qo'ng'iroq ~ yiliga 100 MB).

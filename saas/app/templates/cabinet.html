@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% from "icons.html" import i %}{% set active="cabinet" %}{% block body %}
-{% set pbx_ok = acc.pbx_domain and acc.pbx_key_enc %}{% set chat_ok = acc.chats|length > 0 %}{% set hook_ok = acc.logs|length > 0 %}
+{% set pbx_ok = acc.pbx_domain and acc.pbx_key_enc %}{% set chat_ok = acc.chats|length > 0 %}{% set hook_ok = logs|length > 0 %}
 {% set done = (1 if pbx_ok else 0) + (1 if chat_ok else 0) + (1 if hook_ok else 0) %}
 <div class="head"><h1>Kabinet</h1><p>OnlinePBX yozuvlarini Telegramga yuborishni sozlang</p></div>
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
@@ -30,8 +30,8 @@
 <p class="muted small" style="margin:8px 0 12px">OnlinePBX → Sozlamalar → Integratsiya → Webhook'larda yangi webhook qo'shib, shu manzilni kiriting
 (hodisa: qo'ng'iroq tugashi / yozuv tayyor bo'lishi; usul: POST). Manzil faqat sizniki — hech kimga bermang.</p>
 <div class="row"><span class="muted">Oxirgi webhook:</span>
-{% if acc.logs %}<b>{{ acc.logs[0].created_at.strftime("%d.%m.%Y %H:%M") }} UTC</b>
-<span class="badge {{ 'ok' if acc.logs[0].status=='sent' else ('err' if acc.logs[0].status=='error' else 'warn') }}">{{ acc.logs[0].status }}</span>
+{% if logs %}<b>{{ logs[0].created_at.strftime("%d.%m.%Y %H:%M") }} UTC</b>
+<span class="badge {{ 'ok' if logs[0].status=='sent' else ('err' if logs[0].status=='error' else 'warn') }}">{{ logs[0].status }}</span>
 {% else %}<span class="badge warn">hali kelmagan</span>{% endif %}
 <form method="post" action="/cabinet/hook/regenerate" onsubmit="return confirm('Eski manzil ishlamay qoladi. Davom etasizmi?')" style="margin-left:auto"><button class="ghost sm">Manzilni qayta yaratish</button></form></div>
 </div>
@@ -69,7 +69,7 @@
 <div class="card"><div class="ch"><span class="ico">{{ i("clock") }}</span>So'nggi qo'ng'iroqlar</div>
 <p class="sub">Webhook orqali kelgan oxirgi 20 ta hodisa (UTC)</p>
 <div class="term">
-{% for l in acc.logs[:20] %}<div class="ln"><span class="t">[{{ l.created_at.strftime("%d.%m %H:%M:%S") }}]</span> <span class="s {{ 'ok' if l.status=='sent' else ('err' if l.status=='error' else 'warn') }}">{{ l.status.ljust(7) }}</span> <span class="id">{{ l.uuid[:8] }}</span>{% if l.error %} <span class="e">{{ l.error }}</span>{% endif %}</div>
+{% for l in logs %}<div class="ln"><span class="t">[{{ l.created_at.strftime("%d.%m %H:%M:%S") }}]</span> <span class="s {{ 'ok' if l.status=='sent' else ('err' if l.status=='error' else 'warn') }}">{{ l.status.ljust(7) }}</span> <span class="id">{{ l.uuid[:8] }}</span>{% if l.error %} <span class="e">{{ l.error }}</span>{% endif %}</div>
 {% else %}<div class="ln"><span class="prompt">$</span> tail -f calls.log</div><div class="ln t">hali qo'ng'iroq kelmagan… <span class="cur"></span></div>{% endfor %}
 </div></div>
 {% endblock %}

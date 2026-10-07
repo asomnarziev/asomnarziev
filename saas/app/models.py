@@ -44,6 +44,8 @@ class Account(Base):
     digest_hour: Mapped[int] = mapped_column(Integer, default=9)
     digest_last: Mapped[str] = mapped_column(String(10), default="")
     missed_on: Mapped[bool] = mapped_column(Boolean, default=True)       # javobsiz qo'ng'iroq ogohlantirishi (Pro)
+    import_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # eski qo'ng'iroqlar oxirgi muvaffaqiyatli yuklangan vaqt (UTC)
+    import_note: Mapped[str] = mapped_column(String(200), default="")             # oxirgi yuklash natijasi / xatosi
     user: Mapped[User] = relationship(back_populates="account")
     chats: Mapped[list["Chat"]] = relationship(back_populates="account", cascade="all, delete-orphan")
     logs: Mapped[list["CallLog"]] = relationship(back_populates="account", cascade="all, delete-orphan",

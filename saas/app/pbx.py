@@ -191,6 +191,11 @@ class PbxClient:
         data = self._post("mongo_history/search.json", {"uuid": uuid}).get("data") or []
         return data[0] if data and isinstance(data[0], dict) else {}
 
+    def history(self, start_ts: int, end_ts: int) -> list[dict]:
+        """[start_ts, end_ts) oralig'idagi qo'ng'iroqlar ro'yxati (faqat ma'lumot; yozuv yuklanmaydi)."""
+        data = self._post("mongo_history/search.json", {"start_stamp_from": start_ts, "start_stamp_to": end_ts}).get("data") or []
+        return [d for d in data if isinstance(d, dict)]
+
     def record(self, uuid: str) -> bytes | None:
         data = self._post("mongo_history/search.json", {"uuid": uuid, "download": 1}).get("data")
         url = data[0] if isinstance(data, list) and data else data

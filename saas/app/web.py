@@ -76,9 +76,13 @@ def logout(request: Request):
 
 
 @router.get("/cabinet")
-def cabinet(request: Request, error: str | None = None, ok: str | None = None, user: User = Depends(require_user)):
+def cabinet(request: Request, error: str | None = None, ok: str | None = None, user: User = Depends(require_user),
+            db: Session = Depends(get_db)):
     acc = user.account
-    return render(request, "cabinet.html", user=user, acc=acc, now=now(), error=error, ok=ok,
+    # faqat oxirgi 20 ta webhook hodisasi (eski tarixdan yuklanganlari "imported" kirmaydi); butun to'plam yuklanmaydi
+    logs = (db.query(CallLog).filter(CallLog.account_id == acc.id, CallLog.status != "imported")
+            .order_by(CallLog.id.desc()).limit(20).all())
+    return render(request, "cabinet.html", user=user, acc=acc, now=now(), error=error, ok=ok, logs=logs,
                   can_digest=_reports_allowed(user),
                   hook_url=f"{config.BASE_URL}/hook/{acc.hook_token}",
                   tg_link=f"https://t.me/{config.BOT_USERNAME}?start={acc.link_code}")
@@ -387,8 +391,30 @@ def _reports_allowed(user: User) -> bool:
     return user.is_admin or user.account.can("reports")
 
 
+@router.post("/reports/import")
+def reports_import(bg: BackgroundTasks, user: User = Depends(require_user)):
+    """Pro: oxirgi 30 kunlik eski qo'ng'iroqlarni OnlinePBX tarixidan hisobot/qidiruvga yuklaydi (fon vazifasi)."""
+    from urllib.parse import quote_plus
+    if not _reports_allowed(user):
+        raise HTTPException(403, "Tarixni yuklash Pro tarifda")
+    acc = user.account
+
+    def back(msg):
+        return go("/reports?error=" + quote_plus(msg))
+
+    if not (acc.pbx_domain and acc.pbx_key_enc):
+        return back("Avval kabinetda OnlinePBX domeni va API kalitini kiriting")
+    if service.is_importing(acc.id):
+        return back("Yuklash allaqachon davom etmoqda")
+    if acc.import_at and (now() - acc.import_at).total_seconds() < service.IMPORT_COOLDOWN:
+        return back("Yaqinda yuklangan. Biroz kutib qayta urinib ko'ring")
+    bg.add_task(service.import_history, acc.id)
+    return go("/reports?ok=import")
+
+
 @router.get("/reports")
 def reports_page(request: Request, period: str | None = None, frm: str | None = None, to: str | None = None,
+                 ok: str | None = None, error: str | None = None,
                  user: User = Depends(require_user), db: Session = Depends(get_db)):
     if not _reports_allowed(user):
         return render(request, "reports_locked.html", user=user, acc=user.account, plans=config.PLANS)
@@ -396,6 +422,7 @@ def reports_page(request: Request, period: str | None = None, frm: str | None = 
     rows = reports.load(db, user.account.id, start, end)
     data = reports.build(rows, start, end)
     return render(request, "reports.html", user=user, acc=user.account, r=data, start=start, end=end, mode=mode,
+                  ok=ok, error=error, importing=service.is_importing(user.account.id), import_days=service.IMPORT_DAYS,
                   day_svg=reports.day_chart(data["by_day"]), hour_svg=reports.hour_chart(data["by_hour"]),
                   qs=f"frm={start.isoformat()}&to={end.isoformat()}")
 

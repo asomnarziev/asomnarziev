@@ -1,17 +1,19 @@
 """Biznes mantiq: qo'ng'iroqni yuborish, Telegram buyruqlari, to'lovni tasdiqlash."""
 import logging
+import threading
 import time
 from datetime import datetime, timedelta, timezone
+from datetime import time as dtime
 
 from html import escape as _escape
 
 from sqlalchemy.orm import Session
 
 from . import config, live, receipts, telegram
-from .messages import DEFAULT_LANG, LANGS, TEMPLATES, audio_name, render_call, render_missed
+from .messages import DEFAULT_LANG, LANGS, LOCAL_TZ, TEMPLATES, audio_name, render_call, render_missed
 from .db import SessionLocal
 from .models import Account, CallLog, Chat, Payment, now
-from .pbx import PbxClient
+from .pbx import PbxClient, PbxError
 from .security import decrypt
 
 log = logging.getLogger(__name__)
@@ -70,7 +72,8 @@ def process_call(db: Session, account_id: int, uuid: str) -> None:
         db.rollback()
         return
     day_start = now().replace(hour=0, minute=0, second=0, microsecond=0)
-    today = db.query(CallLog).filter(CallLog.account_id == acc.id, CallLog.created_at >= day_start).count()
+    today = db.query(CallLog).filter(CallLog.account_id == acc.id, CallLog.created_at >= day_start,
+                                     CallLog.status != "imported").count()
     if acc.active and today > config.MAX_CALLS_PER_DAY:
         log_row.status, log_row.error = "skipped", f"kunlik limit ({config.MAX_CALLS_PER_DAY}) oshdi"
         db.commit()
@@ -234,3 +237,110 @@ def handle_payment_callback(db: Session, cb: dict) -> None:
     except Exception:
         log.warning("clear buttons failed #%s", p.id)
     notify_customer(p.account_id, action == "ok")
+
+
+# ---------- Eski qo'ng'iroqlarni OnlinePBX tarixidan yuklash (faqat ma'lumot; yozuv fayllari saqlanmaydi) ----------
+IMPORT_DAYS = 30
+IMPORT_SPLIT_AT = 500        # oynada shuncha va undan ko'p qator qaytsa, API javobni qirqqan bo'lishi mumkin: oynani ikkiga bo'lamiz
+IMPORT_MIN_WINDOW = 900      # soniya (15 daqiqa): bundan kichik oynalar bo'linmaydi
+IMPORT_MAX_ROWS = 20_000     # bir yuklashda ko'pi bilan (suiiste'moldan himoya)
+IMPORT_COOLDOWN = 600        # soniya: muvaffaqiyatli yuklashdan keyin qayta yuklashga tanaffus
+_importing: set[int] = set()
+_import_lock = threading.Lock()
+
+
+def is_importing(account_id: int) -> bool:
+    with _import_lock:
+        return account_id in _importing
+
+
+def _fetch_window(pbx, start: int, end: int, out: list) -> None:
+    rows = pbx.history(start, end)
+    if len(rows) >= IMPORT_SPLIT_AT and end - start > IMPORT_MIN_WINDOW:
+        mid = (start + end) // 2
+        _fetch_window(pbx, start, mid, out)
+        _fetch_window(pbx, mid, end, out)
+    else:
+        out.extend(rows)
+
+
+def _store_history(db: Session, acc: Account, calls: dict[str, dict]) -> int:
+    uuids = list(calls)
+    existing: set[str] = set()
+    for i in range(0, len(uuids), 500):
+        chunk = uuids[i:i + 500]
+        existing |= {u for (u,) in db.query(CallLog.uuid).filter(CallLog.account_id == acc.id, CallLog.uuid.in_(chunk))}
+    added = 0
+    for u in uuids:
+        call = calls[u]
+        if u in existing or not call.get("start_stamp"):
+            continue
+        row = CallLog(account_id=acc.id, uuid=u[:100], status="imported")
+        store_call_stats(row, call)
+        row.created_at = row.started_at  # "bugun yaratilgan" hisoblanmasin (kunlik limit)
+        db.add(row)
+        added += 1
+        if added % 500 == 0:
+            db.commit()
+    try:
+        db.commit()
+    except Exception:  # webhook bilan bir vaqtda kelgan takror uuid: qatorma-qator qo'shamiz
+        db.rollback()
+        added = 0
+        for u in uuids:
+            call = calls[u]
+            if not call.get("start_stamp"):
+                continue
+            row = CallLog(account_id=acc.id, uuid=u[:100], status="imported")
+            store_call_stats(row, call)
+            row.created_at = row.started_at
+            try:
+                with db.begin_nested():
+                    db.add(row)
+                added += 1
+            except Exception:
+                pass
+        db.commit()
+    return added
+
+
+def import_history(account_id: int, days: int = IMPORT_DAYS) -> None:
+    """Oxirgi `days` kunning qo'ng'iroqlarini OnlinePBX tarixidan CallLog'ga ('imported') qo'shadi. Takror ishga tushirish xavfsiz."""
+    with _import_lock:
+        if account_id in _importing:
+            return
+        _importing.add(account_id)
+    try:
+        with SessionLocal() as db:
+            acc = db.get(Account, account_id)
+            ok, note = False, ""
+            try:
+                pbx = PbxClient(acc.pbx_domain, decrypt(acc.pbx_key_enc))
+                first_day = datetime.now(LOCAL_TZ).date() - timedelta(days=days - 1)
+                cursor = int(datetime.combine(first_day, dtime(0), LOCAL_TZ).timestamp())
+                end = int(time.time()) + 1
+                calls: dict[str, dict] = {}
+                while cursor < end:  # kunma-kun: so'rovlar API tezlik chegarasi (PBX_RPS_*) bilan sekin yuboriladi
+                    nxt = min(cursor + 86400, end)
+                    rows: list = []
+                    _fetch_window(pbx, cursor, nxt, rows)
+                    for r in rows:
+                        if r.get("uuid"):
+                            calls[str(r["uuid"])] = r
+                    if len(calls) > IMPORT_MAX_ROWS:
+                        raise PbxError(f"Qo'ng'iroqlar juda ko'p (>{IMPORT_MAX_ROWS}): davrni qisqartiring")
+                    cursor = nxt
+                note, ok = f"{_store_history(db, acc, calls)} ta qo'ng'iroq qo'shildi (jami topildi: {len(calls)})", True
+            except Exception as e:
+                log.exception("history import failed acc=%s", account_id)
+                db.rollback()
+                note = str(e)[:190] or "Noma'lum xato"
+            acc = db.get(Account, account_id)
+            acc.import_note = note
+            if ok:
+                acc.import_at = now()
+            db.commit()
+            live.publish(account_id, {"id": 0, "import": True})  # ochiq hisobot/qidiruv sahifalari yangilansin
+    finally:
+        with _import_lock:
+            _importing.discard(account_id)

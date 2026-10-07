@@ -2,6 +2,8 @@
 <div class="head"><h1>Hisobotlar</h1><p>{{ start.strftime("%d.%m.%Y") }} — {{ end.strftime("%d.%m.%Y") }} (Toshkent vaqti)</p><span class="livetag"><span id="live-dot" class="live off"></span>jonli</span></div>
 <div id="live-banner"><span></span><button type="button" class="sm">Yangilash</button></div>
 
+{% if ok == "import" %}<p class="ok">Yuklash boshlandi. Tugagach natija shu sahifada o'zi ko'rinadi.</p>{% endif %}
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
 <div class="tabs">
  {% for k,l in (("today","Bugun"),("7d","7 kun"),("30d","30 kun"),("90d","90 kun")) %}<a class="{{ 'on' if mode==k }}" href="/reports?period={{ k }}">{{ l }}</a>{% endfor %}
  <form method="get" action="/reports"><input class="sm" type="date" name="frm" value="{{ start.isoformat() }}" required><span class="muted">—</span>
@@ -10,6 +12,13 @@
 </div>
 
 <div id="live-area">
+{% if importing %}<div class="card"><span class="live on"></span> Eski qo'ng'iroqlar OnlinePBX tarixidan yuklanmoqda… (1–2 daqiqa; tugagach sahifa o'zi yangilanadi)</div>
+{% elif not acc.import_at %}<div class="card"><div class="ch"><span class="ico">{{ i("clock") }}</span>Eski qo'ng'iroqlar</div>
+<p class="sub">Hisobot yangilanishdan keyin kelgan qo'ng'iroqlardan to'planadi. Oxirgi {{ import_days }} kunlik tarixni OnlinePBX'dan yuklashingiz mumkin: faqat ma'lumot (kim, kimga, vaqt, davomiylik). Yozuv fayllari serverda saqlanmaydi.</p>
+{% if acc.import_note %}<p class="err" style="margin-bottom:10px">{{ acc.import_note }}</p>{% endif %}
+<form method="post" action="/reports/import"><button class="sm">Oxirgi {{ import_days }} kunni yuklash</button></form></div>
+{% else %}<p class="muted small" style="margin:0 0 10px">Tarix yuklangan: {{ acc.import_at.strftime("%d.%m.%Y %H:%M") }} UTC — {{ acc.import_note }}.
+<form method="post" action="/reports/import" style="display:inline"><button class="ghost sm">Qayta yuklash</button></form></p>{% endif %}
 <div class="kpis">
  <div class="stat"><div><small>Jami qo'ng'iroq</small><b>{{ r.total }}</b></div></div>
  <div class="stat"><div><small>Javob berilgan</small><b>{{ r.answered }}</b> <span class="muted small">{{ r.answer_rate }}%</span></div></div>
