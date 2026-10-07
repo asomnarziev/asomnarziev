@@ -6,7 +6,7 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from . import config, telegram
-from .messages import DEFAULT_LANG, LANGS, TEMPLATES, render_call
+from .messages import DEFAULT_LANG, LANGS, TEMPLATES, audio_name, render_call
 from .models import Account, CallLog, Chat, Payment, now
 from .pbx import PbxClient
 from .security import decrypt
@@ -49,7 +49,7 @@ def process_call(db: Session, account_id: int, uuid: str) -> None:
             lang = chat.lang if chat.lang in LANGS else DEFAULT_LANG
             caption = render_call(lang, call)
             if audio:
-                telegram.send_audio(chat.chat_id, caption, audio, f"{uuid}.mp3")
+                telegram.send_audio(chat.chat_id, caption, audio, audio_name(call))
             else:
                 telegram.send_message(chat.chat_id, caption + "\n\n" + TEMPLATES[lang]["no_record"])
         log_row.status = "sent"

@@ -49,12 +49,29 @@ def fmt_duration(seconds: int) -> str:
     return f"{h:d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
 
+import os
+from datetime import datetime, timedelta, timezone
+
+# Server UTC'da ishlaydi; xabarlarda mijozning mahalliy vaqti ko'rsatiladi (Toshkent = UTC+5)
+LOCAL_TZ = timezone(timedelta(hours=float(os.environ.get("TZ_OFFSET_HOURS", "5"))))
+
+
+def local_time(ts):
+    return datetime.fromtimestamp(int(ts), LOCAL_TZ) if ts else None
+
+
+def audio_name(call: dict) -> str:
+    """105_935033635_07.10_12-30.mp3 ko'rinishidagi fayl nomi (topilmasa uuid)."""
+    dt = local_time(call.get("start_stamp"))
+    parts = [call.get("caller_id_number"), call.get("destination_number"), dt and dt.strftime("%d.%m_%H-%M")]
+    name = "_".join(str(p) for p in parts if p) or call.get("uuid", "call")
+    return "".join(c for c in name if c.isalnum() or c in "._-+") + ".mp3"
+
+
 def render_call(lang: str, call: dict) -> str:
     t = TEMPLATES.get(lang) or TEMPLATES[DEFAULT_LANG]
-    from datetime import datetime
-
-    ts = call.get("start_stamp")
-    date = datetime.fromtimestamp(int(ts)).strftime("%d.%m.%Y %H:%M:%S") if ts else t["unknown"]
+    dt = local_time(call.get("start_stamp"))
+    date = dt.strftime("%d.%m.%Y %H:%M:%S") if dt else t["unknown"]
     return t["call"].format(
         direction=t["direction"].get(call.get("accountcode"), t["unknown"]),
         caller=call.get("caller_id_number") or t["unknown"],
