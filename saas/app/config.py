@@ -18,7 +18,8 @@ PLANS = {
               "perks": ["3 tagacha chat", "O'zbekcha va ruscha shablonlar", "Qo'ng'iroq yozuvlari Telegramga"]},
     "pro": {"name": "Pro", "price": 249_000, "days": 30, "max_chats": 20, "features": ("reports",),
             "perks": ["20 tagacha chat", "O'zbekcha va ruscha shablonlar", "Qo'ng'iroq yozuvlari Telegramga",
-                      "Hisobotlar: kunlar, soatlar, xodimlar bo'yicha statistika", "Hisobotni CSV (Excel) ga yuklab olish"]},
+                      "Hisobotlar: kunlar, soatlar, xodimlar bo'yicha statistika", "Hisobotni CSV (Excel) ga yuklab olish",
+                      "Kunlik hisobot Telegramga (har kuni ertalab)"]},
 }
 TRIAL_MAX_CHATS = 3
 
@@ -35,3 +36,6 @@ ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID", "").strip()                 # to
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "uploads")                        # cheklar saqlanadigan papka (ishchi papkaga nisbatan)
 MAX_RECEIPT_MB = int(os.environ.get("MAX_RECEIPT_MB", "8"))
 MAX_PENDING_PAYMENTS = 3                                                    # bitta mijozning kutilayotgan to'lovlari
+
+# Fon rejalashtiruvchi (kunlik hisobot). Faqat bitta uvicorn worker bilan ishlating; testlarda SCHEDULER=0
+SCHEDULER = os.environ.get("SCHEDULER", "1").lower() in ("1", "true", "yes")

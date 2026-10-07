@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from . import config, receipts, reports, service, telegram
+from . import config, receipts, reports, scheduler, service, telegram
 from .db import get_db
 from .messages import LANGS, TEMPLATES
 from .models import Account, Chat, Payment, User, now, token
@@ -69,9 +69,10 @@ def logout(request: Request):
 
 
 @router.get("/cabinet")
-def cabinet(request: Request, error: str | None = None, user: User = Depends(require_user)):
+def cabinet(request: Request, error: str | None = None, ok: str | None = None, user: User = Depends(require_user)):
     acc = user.account
-    return render(request, "cabinet.html", user=user, acc=acc, now=now(), error=error,
+    return render(request, "cabinet.html", user=user, acc=acc, now=now(), error=error, ok=ok,
+                  can_digest=_reports_allowed(user),
                   hook_url=f"{config.BASE_URL}/hook/{acc.hook_token}",
                   tg_link=f"https://t.me/{config.BOT_USERNAME}?start={acc.link_code}")
 
@@ -110,7 +111,7 @@ def add_chat(chat_id: str = Form(...), lang: str = Form("uz"), user: User = Depe
     from urllib.parse import quote_plus
 
     def back(msg):  # xatoni xom JSON o'rniga kabinet sahifasida ko'rsatamiz
-        return go(f"/cabinet?error={quote_plus(msg)}")
+        return go(f"/cabinet?error={quote_plus('Chat qo' + chr(39) + 'shilmadi. ' + msg)}")
 
     acc, chat_id = user.account, chat_id.strip()
     # shaxsiy/guruh/superguruh/kanal: 12345, -100123..., yoki ochiq kanal uchun @username
@@ -194,6 +195,31 @@ async def checkout(bg: BackgroundTasks, plan: str = Form(...), months: int = For
     db.commit()
     bg.add_task(service.notify_admin_payment, p.id)
     return go("/billing?ok=1")
+
+
+@router.post("/cabinet/digest")
+def save_digest(on: str | None = Form(None), hour: int = Form(9), user: User = Depends(require_user),
+                db: Session = Depends(get_db)):
+    """Kunlik hisobot sozlamasi (Pro): yoqish/o'chirish va yuborish soati (Toshkent vaqti)."""
+    if not _reports_allowed(user):
+        raise HTTPException(403, "Kunlik hisobot Pro tarifda")
+    if not 0 <= hour <= 23:
+        raise HTTPException(400)
+    user.account.digest_on, user.account.digest_hour = on is not None, hour
+    db.commit()
+    return go("/cabinet?ok=digest")
+
+
+@router.post("/cabinet/digest/test")
+def test_digest(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Bugungi (hozirgacha) hisobotni darrov chatlarga yuboradi: sozlamani tekshirish uchun."""
+    from urllib.parse import quote_plus
+    if not _reports_allowed(user):
+        raise HTTPException(403, "Kunlik hisobot Pro tarifda")
+    if not user.account.chats:
+        return go("/cabinet?error=" + quote_plus("Avval Telegram chat ulang"))
+    sent = scheduler.send_digest(db, user.account, reports.today_local(), test=True)
+    return go("/cabinet?ok=digest_test" if sent else "/cabinet?error=" + quote_plus("Hisobotni yuborib bo'lmadi: chatlarni tekshiring"))
 
 
 def _reports_allowed(user: User) -> bool:

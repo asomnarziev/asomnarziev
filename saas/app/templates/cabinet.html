@@ -2,7 +2,8 @@
 {% set pbx_ok = acc.pbx_domain and acc.pbx_key_enc %}{% set chat_ok = acc.chats|length > 0 %}{% set hook_ok = acc.logs|length > 0 %}
 {% set done = (1 if pbx_ok else 0) + (1 if chat_ok else 0) + (1 if hook_ok else 0) %}
 <div class="head"><h1>Kabinet</h1><p>OnlinePBX yozuvlarini Telegramga yuborishni sozlang</p></div>
-{% if error %}<p class="err"><b>Chat qo'shilmadi.</b> {{ error }}</p>{% endif %}
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+{% if ok == "digest" %}<p class="ok">Kunlik hisobot sozlamasi saqlandi.</p>{% elif ok == "digest_test" %}<p class="ok">Sinov hisoboti chatlarga yuborildi.</p>{% endif %}
 
 <div class="stats">
  <div class="stat"><div class="ico">{{ i("shield") }}</div><div><small>Obuna</small><b>{% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</b></div></div>
@@ -51,6 +52,15 @@
 <select name="lang">{% for k,v in langs.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select><button class="ghost">Qo'lda qo'shish</button></form>
 <form method="post" action="/cabinet/test"><button>{{ i("send",14) }}Sinov xabari</button></form></div>
 </div>
+
+<div class="card"><div class="ch"><span class="ico">{{ i("chart") }}</span>Kunlik hisobot <span class="badge ok" style="margin-left:6px">PRO</span></div>
+{% if can_digest %}<p class="sub">Har kuni ertalab kechagi natija (qo'ng'iroqlar soni, javobsizlar, xodimlar) ulangan chatlarga o'z tilida yuboriladi. Qo'ng'iroq bo'lmagan kunda xabar yuborilmaydi.</p>
+<form method="post" action="/cabinet/digest" class="row">
+<label class="row" style="gap:6px"><input type="checkbox" name="on" value="1" {{ "checked" if acc.digest_on }}> Yoqilgan</label>
+<span class="muted">Soat:</span><select class="sm" name="hour">{% for h in range(24) %}<option value="{{ h }}" {{ "selected" if h==acc.digest_hour }}>{{ "%02d"|format(h) }}:00</option>{% endfor %}</select>
+<span class="muted small">(Toshkent vaqti)</span><button class="sm">Saqlash</button></form>
+<form method="post" action="/cabinet/digest/test" style="margin-top:10px"><button class="ghost sm">{{ i("send",14) }}Hozir sinab ko'rish (bugungi hisobot)</button></form>
+{% else %}<p class="sub">Har kuni ertalab kechagi natija Telegramga o'zi keladi. <a href="/billing">Pro tarifda</a> mavjud.</p>{% endif %}</div>
 
 <div class="card"><div class="ch"><span class="ico">{{ i("clock") }}</span>So'nggi qo'ng'iroqlar</div>
 <p class="sub">Webhook orqali kelgan oxirgi 20 ta hodisa (UTC)</p>

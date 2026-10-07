@@ -39,6 +39,10 @@ class Account(Base):
     trial_ends: Mapped[datetime] = mapped_column(DateTime, default=lambda: now() + timedelta(days=config.TRIAL_DAYS))
     paid_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     suspended: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Kunlik hisobot (Pro): yoqilganmi, mahalliy soat (0-23), oxirgi yuborilgan kun (YYYY-MM-DD)
+    digest_on: Mapped[bool] = mapped_column(Boolean, default=True)
+    digest_hour: Mapped[int] = mapped_column(Integer, default=9)
+    digest_last: Mapped[str] = mapped_column(String(10), default="")
     user: Mapped[User] = relationship(back_populates="account")
     chats: Mapped[list["Chat"]] = relationship(back_populates="account", cascade="all, delete-orphan")
     logs: Mapped[list["CallLog"]] = relationship(back_populates="account", cascade="all, delete-orphan",

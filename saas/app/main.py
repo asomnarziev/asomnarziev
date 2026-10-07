@@ -3,14 +3,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import config, hooks, web
+from . import config, hooks, scheduler, web
 from .db import init_db
 
 
 @asynccontextmanager
 async def lifespan(app):
     init_db()
+    stop = None
+    if config.SCHEDULER:
+        _, stop = scheduler.start()
     yield
+    if stop:
+        stop.set()
 
 
 app = FastAPI(title="PBX → Telegram", lifespan=lifespan)

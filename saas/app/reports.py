@@ -87,6 +87,7 @@ def build(rows: list[CallLog], start: date, end: date) -> dict:
     by_hour = [0] * 24
     emp: dict[str, dict] = defaultdict(lambda: {"calls": 0, "in": 0, "out": 0, "missed": 0, "talk": 0})
     ext = Counter()
+    missed_ext = Counter()
     for r in rows:
         dt = local(r.started_at)
         if dt.date() in by_day:
@@ -103,6 +104,8 @@ def build(rows: list[CallLog], start: date, end: date) -> dict:
             d["talk"] += talk_seconds(r) if answered(r) else 0
         if x:
             ext[x] += 1
+            if not answered(r):
+                missed_ext[x] += 1
     return {
         "total": total, "answered": len(ans), "missed": total - len(ans),
         "answer_rate": round(100 * len(ans) / total) if total else 0,
@@ -111,7 +114,7 @@ def build(rows: list[CallLog], start: date, end: date) -> dict:
         "by_day": [(d, c, t) for d, (c, t) in by_day.items()], "by_hour": by_hour,
         "employees": sorted(({"ext": k, **v, "talk_fmt": fmt_duration(v["talk"])} for k, v in emp.items()),
                             key=lambda x: -x["calls"])[:15],
-        "top_numbers": ext.most_common(10),
+        "top_numbers": ext.most_common(10), "missed_numbers": missed_ext.most_common(5),
         "busiest_hour": max(range(24), key=lambda h: by_hour[h]) if total else None,
     }
 
@@ -166,3 +169,29 @@ def to_csv(rows: list[CallLog]) -> str:
         w.writerow([local(r.started_at).strftime("%Y-%m-%d %H:%M:%S"), _safe(r.direction), _safe(r.caller), _safe(r.callee),
                     _safe(e), r.duration or 0, talk_seconds(r), "javob berilgan" if answered(r) else "javob berilmagan", r.uuid])
     return "﻿" + buf.getvalue()  # BOM: Excel UTF-8 ni to'g'ri ochadi
+
+
+# ---------- Telegram uchun kunlik hisobot matni ----------
+DIGEST = {
+    "uz": {"title": "Kunlik hisobot", "test": "sinov", "summary": "Jami: <b>{total}</b> · javob berilgan: <b>{answered}</b> ({rate}%) · javobsiz: <b>{missed}</b>",
+           "dirs": "Kiruvchi: {inbound} · chiquvchi: {outbound}", "talk": "Suhbat vaqti: {talk} (o'rtacha {avg})",
+           "busy": "Eng gavjum soat: {hour}:00", "emps": "Xodimlar", "emp": "<code>{ext}</code> — {calls} ta, javobsiz {missed}",
+           "missed": "Javobsiz raqamlar", "num": "<code>{num}</code> — {n} ta"},
+    "ru": {"title": "Дневной отчёт", "test": "тест", "summary": "Всего: <b>{total}</b> · отвечено: <b>{answered}</b> ({rate}%) · пропущено: <b>{missed}</b>",
+           "dirs": "Входящие: {inbound} · исходящие: {outbound}", "talk": "Время разговоров: {talk} (в среднем {avg})",
+           "busy": "Самый загруженный час: {hour}:00", "emps": "Сотрудники", "emp": "<code>{ext}</code> — {calls}, пропущено {missed}",
+           "missed": "Пропущенные номера", "num": "<code>{num}</code> — {n}"},
+}
+
+
+def render_digest(lang: str, day: date, d: dict, test: bool = False) -> str:
+    t = DIGEST.get(lang) or DIGEST["uz"]
+    title = f"📊 <b>{t['title']}</b> · {day.strftime('%d.%m.%Y')}" + (f" ({t['test']})" if test else "")
+    lines = [title, "", t["summary"].format(rate=d["answer_rate"], **{k: d[k] for k in ("total", "answered", "missed")}), t["dirs"].format(inbound=d["inbound"], outbound=d["outbound"]), t["talk"].format(talk=d["talk_total"], avg=d["talk_avg"])]
+    if d["busiest_hour"] is not None:
+        lines.append(t["busy"].format(hour=f"{d['busiest_hour']:02d}"))
+    if d["employees"]:
+        lines += ["", f"<b>{t['emps']}</b>"] + [t["emp"].format(ext=escape(e["ext"]), calls=e["calls"], missed=e["missed"]) for e in d["employees"][:5]]
+    if d["missed_numbers"]:
+        lines += ["", f"<b>{t['missed']}</b>"] + [t["num"].format(num=escape(n), n=c) for n, c in d["missed_numbers"]]
+    return "\n".join(lines)

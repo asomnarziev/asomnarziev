@@ -89,3 +89,10 @@ Baza avtomatik yangilanadi (`payments` jadvaliga ustunlar qo'shiladi).
 Statistika webhook orqali kelgan qo'ng'iroqlardan to'planadi, shuning uchun yangilashdan **oldingi** qo'ng'iroqlar hisobotda bo'lmaydi. Bu OnlinePBX API limitiga tegmaslik uchun ham shunday: hisobot uchun API'ga qo'shimcha so'rov yuborilmaydi.
 Pro imkoniyatlari `app/config.py` dagi `PLANS[...]["features"]` da belgilanadi (yangi pullik imkoniyatni shu yerga qo'shib, `acc.can("nom")` bilan tekshiriladi).
 Javobsiz qo'ng'iroqlar to'liq ko'rinishi uchun OnlinePBX'da "Пропущенный" hodisasini ham webhook'ga yoqing (hozir faqat "Завершили").
+
+## Kunlik hisobot (Pro)
+Pro tarifdagi mijozlarga har kuni ertalab (standart 09:00, Toshkent vaqti; kabinetda o'zgartiriladi) kechagi hisobot ulangan chatlarga o'z tilida yuboriladi: jami/javob berilgan/javobsiz, kirish-chiqish, suhbat vaqti, eng gavjum soat, xodimlar va javobsiz raqamlar. Qo'ng'iroq bo'lmagan kunda xabar yuborilmaydi.
+- Ilova ichidagi fon oqimi har daqiqada tekshiradi (alohida cron kerak emas). **Bitta uvicorn worker** bilan ishlating (hozirgi systemd sozlamasi shunday).
+- Server o'chiq turib soat o'tib ketsa, yoqilgandan keyin o'sha kunning hisoboti yuboriladi; bir kunga ikki marta yuborilmaydi.
+- Telegram xatosida 3 marta urinadi, keyin o'sha kunni o'tkazib yuboradi.
+- O'chirish: `.env` ga `SCHEDULER=0`. Vaqt mintaqasi: `TZ_OFFSET_HOURS` (standart 5).

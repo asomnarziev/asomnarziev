@@ -1,6 +1,6 @@
 import os
 
-os.environ.update(DATABASE_URL="sqlite:///./test.db", ADMIN_EMAIL="admin@x.uz", BOT_USERNAME="b", BASE_URL="http://t")
+os.environ.update(SCHEDULER="0", DATABASE_URL="sqlite:///./test.db", ADMIN_EMAIL="admin@x.uz", BOT_USERNAME="b", BASE_URL="http://t")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -589,8 +589,9 @@ def test_manual_chat_errors_are_shown_on_page_with_telegram_reason(client, monke
 
     monkeypatch.setattr(telegram.requests, "post", lambda *a, **k: Resp())
     r = client.post("/cabinet/chat", data={"chat_id": "123456", "lang": "uz"}, follow_redirects=True)
-    assert r.status_code == 200 and "Chat qo'shilmadi" in r.text
-    assert "Chat topilmadi" in r.text and "chat not found" in r.text  # tushuntirish + Telegram sababi
+    page = r.text.replace("&#39;", "'")  # Jinja ' ni &#39; ga aylantiradi, brauzer to'g'ri ko'rsatadi
+    assert r.status_code == 200 and "Chat qo'shilmadi" in page
+    assert "Chat topilmadi" in page and "chat not found" in page  # tushuntirish + Telegram sababi
     assert '{"detail"' not in r.text  # xom JSON emas
     bad = client.post("/cabinet/chat", data={"chat_id": "+998901234567", "lang": "uz"}, follow_redirects=True)
     assert "Telefon raqam" in bad.text
@@ -609,13 +610,13 @@ def _utc(local_dt):
     return local_dt.astimezone(timezone.utc).replace(tzinfo=None)
 
 
-def seed_calls(account_id):
-    """Bugungi (Toshkent vaqti) 4 ta qo'ng'iroq: 2 javob berilgan, 2 javobsiz."""
+def seed_calls(account_id, d=None):
+    """Berilgan (standart: bugungi) Toshkent kuni uchun 4 ta qo'ng'iroq: 2 javob berilgan, 2 javobsiz."""
     from datetime import datetime, time
     from app import reports
     from app.messages import LOCAL_TZ
     from app.models import CallLog
-    d = reports.today_local()
+    d = d or reports.today_local()
     at = lambda h, m: _utc(datetime.combine(d, time(h, m), LOCAL_TZ))
     rows = [("a", "inbound", "998901112233", "105", at(10, 0), 70, 60),
             ("b", "outbound", "105", "998905556677", at(10, 30), 40, 30),
@@ -623,7 +624,7 @@ def seed_calls(account_id):
             ("d", "inbound", "998901112233", "105", at(15, 10), 0, None)]
     with SessionLocal() as db:
         for u, dr, ca, ce, st, dur, talk in rows:
-            db.add(CallLog(account_id=account_id, uuid=u, status="sent", direction=dr, caller=ca, callee=ce,
+            db.add(CallLog(account_id=account_id, uuid=f"{d}{u}", status="sent", direction=dr, caller=ca, callee=ce,
                            started_at=st, duration=dur, talk=talk))
         db.commit()
 
@@ -728,3 +729,124 @@ def test_plan_features_and_billing_perks(client):
     register(client, "c@x.uz")
     assert "Hisobotlar" in client.get("/billing").text
     assert config.PLANS["pro"]["features"] == ("reports",) and config.PLANS["start"]["features"] == ()
+
+
+# ---------- Kunlik hisobot (Pro) ----------
+def at_local(h, m=0, days=0):
+    from datetime import datetime, time, timedelta, timezone
+    from app import reports
+    from app.messages import LOCAL_TZ
+    return datetime.combine(reports.today_local() + timedelta(days=days), time(h, m), LOCAL_TZ).astimezone(timezone.utc)
+
+
+@pytest.fixture()
+def digest_env(client, monkeypatch):
+    from app import scheduler
+    scheduler._attempts.clear()
+    sent = []
+    monkeypatch.setattr(telegram, "send_message", lambda chat, text, markup=None: sent.append((chat, text)))
+    admin = client; register(admin, "admin@x.uz")
+    cust = TestClient(app); register(cust, "c@x.uz")
+    cust.post("/cabinet/chat", data={"chat_id": "1", "lang": "uz"})
+    cust.post("/cabinet/chat", data={"chat_id": "2", "lang": "ru"})
+    sent.clear()
+    return admin, cust, sent
+
+
+def test_daily_digest_sent_once_in_chat_languages(digest_env):
+    from datetime import timedelta
+    from app import reports, scheduler
+    admin, cust, sent = digest_env
+    make_pro(admin, 2)
+    seed_calls(2, reports.today_local() - timedelta(days=1))  # kechagi qo'ng'iroqlar
+    with SessionLocal() as db:
+        assert scheduler.run_due(db, at_local(8, 59)) == 0 and sent == []  # soat 9:00 dan oldin yuborilmaydi
+        assert scheduler.run_due(db, at_local(9, 5)) == 1
+        acc = db.get(Account, 2)
+        assert acc.digest_last == (reports.today_local() - timedelta(days=1)).isoformat()
+    assert [c for c, _ in sent] == ["1", "2"]
+    uz, ru = sent[0][1], sent[1][1]
+    assert "Kunlik hisobot" in uz and "Jami: <b>4</b>" in uz and "javob berilgan: <b>2</b> (50%)" in uz and "Suhbat vaqti: 01:30" in uz
+    assert "<code>105</code> — 3 ta, javobsiz 1" in uz and "Javobsiz raqamlar" in uz and "998901112233" in uz
+    assert "Дневной отчёт" in ru and "Всего: <b>4</b>" in ru and "пропущено: <b>2</b>" in ru
+    with SessionLocal() as db:
+        assert scheduler.run_due(db, at_local(9, 30)) == 0  # ikkinchi marta yuborilmaydi
+    assert len(sent) == 2
+    with SessionLocal() as db:  # ertasi kuni: kecha qo'ng'iroq yo'q -> xabar yo'q, lekin kun belgilanadi
+        assert scheduler.run_due(db, at_local(9, 5, days=1)) == 1
+    assert len(sent) == 2
+
+
+def test_digest_skips_non_pro_disabled_and_no_chats(digest_env):
+    from datetime import timedelta
+    from app import reports, scheduler
+    admin, cust, sent = digest_env
+    seed_calls(2, reports.today_local() - timedelta(days=1))
+    with SessionLocal() as db:
+        assert scheduler.run_due(db, at_local(9, 5)) == 0  # Pro emas (sinov)
+    make_pro(admin, 2)
+    cust.post("/cabinet/digest", data={"hour": "9"})  # "on" yo'q = o'chirilgan
+    with SessionLocal() as db:
+        assert scheduler.run_due(db, at_local(9, 5)) == 0
+    cust.post("/cabinet/digest", data={"on": "1", "hour": "10"})
+    with SessionLocal() as db:
+        assert scheduler.run_due(db, at_local(9, 5)) == 0  # soat 10:00 qo'yilgan
+        assert scheduler.run_due(db, at_local(10, 0)) == 1
+    assert [c for c, _ in sent] == ["1", "2"]  # ikki chatga ketdi
+
+
+def test_digest_retries_then_gives_up(digest_env, monkeypatch):
+    from datetime import timedelta
+    from app import reports, scheduler
+    admin, cust, sent = digest_env
+    make_pro(admin, 2)
+    seed_calls(2, reports.today_local() - timedelta(days=1))
+    def boom(*a, **k): raise RuntimeError("down")
+    monkeypatch.setattr(telegram, "send_message", boom)
+    with SessionLocal() as db:
+        assert [scheduler.run_due(db, at_local(9, 5)) for _ in range(3)] == [0, 0, 1]  # 3-urinishdan keyin tashlanadi
+        assert scheduler.run_due(db, at_local(9, 6)) == 0
+
+
+def test_digest_settings_and_test_button(digest_env):
+    from app import reports
+    admin, cust, sent = digest_env
+    assert cust.post("/cabinet/digest", data={"on": "1", "hour": "9"}).status_code == 403  # Pro emas
+    assert cust.post("/cabinet/digest/test").status_code == 403
+    assert "Pro tarifda" in cust.get("/cabinet").text
+    make_pro(admin, 2)
+    assert cust.post("/cabinet/digest", data={"on": "1", "hour": "24"}).status_code == 400
+    r = cust.post("/cabinet/digest", data={"on": "1", "hour": "7"}, follow_redirects=False)
+    assert r.status_code == 303
+    with SessionLocal() as db:
+        a = db.get(Account, 2)
+        assert (a.digest_on, a.digest_hour) == (True, 7)
+    assert "07:00" in cust.get("/cabinet").text
+    seed_calls(2)
+    cust.post("/cabinet/digest/test")
+    assert len(sent) == 2 and "(sinov)" in sent[0][1] and reports.today_local().strftime("%d.%m.%Y") in sent[0][1]
+    nochat = TestClient(app); register(nochat, "n@x.uz"); make_pro(admin, 3)
+    r = nochat.post("/cabinet/digest/test", follow_redirects=True)
+    assert "Avval Telegram chat ulang" in r.text
+
+
+def test_scheduler_thread_starts_and_stops():
+    from app import scheduler
+    t, stop = scheduler.start()
+    assert t.is_alive()
+    stop.set(); t.join(3)
+    assert not t.is_alive()
+
+
+def test_migration_adds_digest_columns(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, inspect, text
+    from app import db as dbm
+    eng = create_engine(f"sqlite:///{tmp_path/'old3.db'}")
+    with eng.begin() as c:
+        c.execute(text("CREATE TABLE accounts (id INTEGER PRIMARY KEY, user_id INTEGER, pbx_domain VARCHAR(255), pbx_key_enc TEXT, hook_token VARCHAR(64), link_code VARCHAR(64), plan VARCHAR(20), trial_ends DATETIME, paid_until DATETIME, suspended BOOLEAN)"))
+        c.execute(text("INSERT INTO accounts (user_id, plan, suspended) VALUES (1,'pro',0)"))
+    monkeypatch.setattr(dbm, "engine", eng)
+    dbm.init_db()
+    assert {"digest_on", "digest_hour", "digest_last"} <= {c["name"] for c in inspect(eng).get_columns("accounts")}
+    with eng.connect() as c:
+        assert c.execute(text("SELECT digest_on, digest_hour, digest_last FROM accounts")).one() == (1, 9, "")
