@@ -25,6 +25,8 @@ jobs:
         run: ruff check .
       - name: Format tekshiruvi (ruff)
         run: ruff format --check .
+      - name: Shell skriptlar (shellcheck)
+        run: shellcheck deploy/*.sh
       - name: Testlar
         run: pytest -q
       - name: Xavfsizlik (bandit)

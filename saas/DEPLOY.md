@@ -52,18 +52,32 @@ Baza o'zgarishlari (yangi ustunlar) ilova ishga tushganda avtomatik qo'llanadi. 
 
 ## 3. Zaxira va tiklash
 
-Har kuni 03:15 da avtomatik (`/etc/cron.d/pbxbot-backup`), `/var/backups/pbxbot/` ga: baza (`db_*.sql.gz`) va cheklar (`uploads_*.tar.gz`), 14 kun saqlanadi. Qo'lda: `bash /opt/pbxbot/saas/deploy/backup.sh`.
+**Har kuni 23:59 da** (Toshkent vaqti; cron `59 18 * * *` UTC da, `/etc/cron.d/pbxbot-backup`) avtomatik:
+
+1. Baza `pg_dump` bilan olinadi va **to'liqligi tekshiriladi** (dump oxiri bor-yo'qligi). Yaroqsiz bo'lsa, hech narsa o'chirilmaydi.
+2. Yuklangan cheklar arxivlanadi (`/var/backups/pbxbot/`).
+3. **Eski nusxalar o'chiriladi**: serverda faqat eng yangisi qoladi (`BACKUP_KEEP=1`, xohlasangiz ko'paytiring).
+4. Baza **shifrlanib adminning Telegramiga** (`ADMIN_CHAT_ID`) yuboriladi: hajmi, mijozlar/qo'ng'iroqlar/to'lovlar soni bilan. Yangi xabar yetib borgach, **kechagi xabar o'chiriladi**, chatda doim bitta (eng yangi) zaxira turadi. Yuborib bo'lmasa, kechagisi tegilmaydi.
+
+**Bir martalik sozlash** (`.env` ga):
+```bash
+echo "BACKUP_PASSPHRASE=$(openssl rand -base64 24)" >> /opt/pbxbot/saas/.env && grep BACKUP_PASSPHRASE /opt/pbxbot/saas/.env
+```
+Chiqqan parolni **parol menejerga yoki boshqa xavfsiz joyga ham nusxalang**: server yo'qolsa, usiz Telegramdagi zaxirani ochib bo'lmaydi. Parolsiz zaxira Telegramga yuborilmaydi (adminga ogohlantirish keladi), chunki unda mijozlar emaillari va qo'ng'iroq raqamlari bor. Telegram fayl chegarasi 50 MB: baza undan oshsa, ogohlantirish keladi.
+
+Jadval `update.sh` bilan avtomatik yangilanadi. Server vaqt mintaqasi UTC ekanini tekshiring: `timedatectl | grep "Time zone"` (boshqacha bo'lsa, `deploy/pbxbot-backup.cron` dagi soatni moslang). Sinash: `bash /opt/pbxbot/saas/deploy/backup.sh` (Telegramga darrov keladi). Log: `/var/log/pbxbot-backup.log`.
 
 ```bash
-# tiklash (xizmatni to'xtatib)
+# tiklash: Telegramdagi .enc faylni serverga ko'chiring, so'ng:
+cd /opt/pbxbot/saas && /opt/pbxbot/venv/bin/python -m app.backup_cli decrypt /tmp/pbx_db_XXXX.sql.gz.enc /tmp/db.sql.gz   # parol so'raladi
 systemctl stop pbxbot
 sudo -u postgres dropdb pbxbot && sudo -u postgres createdb -O pbxbot pbxbot
-gunzip -c /var/backups/pbxbot/db_YYYY-MM-DD_HHMM.sql.gz | sudo -u postgres psql pbxbot
-tar -xzf /var/backups/pbxbot/uploads_YYYY-MM-DD_HHMM.tar.gz -C /opt/pbxbot/saas && chown -R pbxbot:pbxbot /opt/pbxbot
+gunzip -c /tmp/db.sql.gz | sudo -u postgres psql pbxbot
 systemctl start pbxbot
+# cheklar (serverdagi nusxadan): tar -xzf /var/backups/pbxbot/uploads_*.tar.gz -C /opt/pbxbot/saas && chown -R pbxbot:pbxbot /opt/pbxbot
 ```
 
-Zaxirani vaqti-vaqti bilan **boshqa serverga** ko'chirib turing (masalan `rsync`), bir serverdagi nusxa serverning o'zi bilan yo'qoladi. `.env` (ayniqsa `SECRET_KEY`) ni ham alohida xavfsiz joyda saqlang.
+Cheklar (`uploads`) Telegramga yuborilmaydi (faqat serverda). Bitta nusxa saqlash arzon va sodda, lekin "kecha o'chirib yuborilgan narsani bugun payqash" holatini yopmaydi: shunday xavf bo'lsa `BACKUP_KEEP=7` qo'ying (Telegramda esa baribir bitta qoladi). `.env` (ayniqsa `SECRET_KEY`) ni ham alohida xavfsiz joyda saqlang.
 
 ## 4. Diagnostika
 

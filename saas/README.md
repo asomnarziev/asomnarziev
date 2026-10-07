@@ -44,7 +44,7 @@ app/
   security.py      parol xeshi, shifrlash;  receipts.py — cheklarni xavfsiz saqlash
   web/             sahifalar: auth, cabinet, billing, analytics, calls, stream, admin
   templates/       Jinja2 shablonlari (tashqi kutubxonasiz, qorong'i/yorug' rejim)
-deploy/            install.sh, update.sh, backup.sh, systemd, nginx
+deploy/            install.sh, update.sh, backup.sh (+ app/backup_cli.py), systemd, nginx, cloudflare-realip.sh
 tests/             pytest (mavzu bo'yicha modullar; conftest.py — umumiy fixturalar)
 ```
 
@@ -66,7 +66,7 @@ To'liq qo'llanma: **[DEPLOY.md](DEPLOY.md)** (o'rnatish, yangilash, zaxira, diag
 
 ```bash
 bash /opt/pbxbot/saas/deploy/update.sh      # yangilash (kod, bog'liqliklar, restart, sog'liq tekshiruvi)
-bash /opt/pbxbot/saas/deploy/backup.sh      # zaxira (har kuni 03:15 o'zi ham ishlaydi)
+bash /opt/pbxbot/saas/deploy/backup.sh      # zaxira (har kuni 23:59 o'zi ishlaydi: shifrlab adminning Telegramiga)
 curl http://127.0.0.1:8000/healthz          # holat: baza, scheduler, versiya
 journalctl -u pbxbot -f                     # loglar
 ```

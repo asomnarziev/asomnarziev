@@ -24,6 +24,12 @@ if ! cmp -s saas/deploy/pbxbot.service /etc/systemd/system/pbxbot.service; then
   echo "systemd xizmat fayli yangilandi"
 fi
 
+# zaxira jadvali (cron) o'zgargan bo'lsa yangilaymiz
+if ! cmp -s saas/deploy/pbxbot-backup.cron /etc/cron.d/pbxbot-backup; then
+  install -m 644 saas/deploy/pbxbot-backup.cron /etc/cron.d/pbxbot-backup
+  echo "zaxira jadvali yangilandi (har kuni 23:59 Toshkent)"
+fi
+
 chown -R pbxbot:pbxbot "$APP"
 systemctl restart pbxbot
 
