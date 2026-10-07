@@ -39,7 +39,8 @@ app/
   reports.py       statistika, grafiklar (SVG), CSV, kunlik hisobot matni
   scheduler.py     fon: kunlik hisobot
   live.py          jonli yangilanish (SSE) hodisalar markazi
-  middleware.py    xavfsizlik sarlavhalari, CSRF (Origin) tekshiruvi
+  middleware.py    xavfsizlik sarlavhalari, CSRF (Origin) tekshiruvi, texnik ishlar rejimi
+  restore.py       bazani zaxiradan tiklash (tekshiruv, nusxa, bitta tranzaksiyada almashtirish)
   ratelimit.py     kirishdagi brute-force himoyasi
   security.py      parol xeshi, shifrlash;  receipts.py — cheklarni xavfsiz saqlash
   web/             sahifalar: auth, cabinet, billing, analytics, calls, stream, admin
@@ -79,6 +80,7 @@ journalctl -u pbxbot -f                     # loglar
 - Xavfsizlik sarlavhalari (CSP, `X-Frame-Options`, HSTS, ...); API hujjat sahifalari o'chirilgan.
 - Har mijoz faqat o'z ma'lumotini ko'radi; cheklar faqat egasi va administratorga (fayl turi mazmuniga qarab tekshiriladi).
 - OnlinePBX API limitlaridan himoya: kalit keshi, tezlik chegarasi, 429 da kutish, noto'g'ri kalit uchun tanaffus.
+- Bazani panel orqali tiklash standart holatda o'chiq (`ALLOW_PANEL_RESTORE=1`); zaxira avval tekshiriladi, admin paroli va tasdiqlash so'zi so'raladi, joriy baza nusxalanadi, almashtirish bitta tranzaksiyada.
 - Yozuv fayllari serverda saqlanmaydi (OnlinePBX'dan oqim sifatida uzatiladi).
 
 ## Cheklovlar va keyingi qadamlar

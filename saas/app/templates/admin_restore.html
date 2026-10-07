@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% from "icons.html" import i %}{% set active="admin" %}{% block body %}
+<div class="head"><h1>Bazani tiklash</h1><p>Zaxira nusxadan butun bazani qaytarish</p></div>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+{% if not enabled %}
+<div class="card"><div class="ch"><span class="ico">{{ i("lock") }}</span>O'chirilgan</div>
+<p class="sub">Xavfsizlik uchun bu imkoniyat standart holatda o'chiq. Yoqish uchun serverda <code>.env</code> ga <code>ALLOW_PANEL_RESTORE=1</code> qo'shib, xizmatni qayta ishga tushiring (<code>systemctl restart pbxbot</code>). Tiklab bo'lgach, qaytarib qo'yishni tavsiya qilamiz.</p></div>
+{% else %}
+<div class="card"><div class="ch"><span class="ico">{{ i("download") }}</span>Telegramdagi zaxiradan</div>
+<p class="sub">Botdan kelgan <code>.enc</code> faylni yuklang. Avval tekshiriladi (shifr, to'liqlik, tarkib), keyin so'raladi. Hech narsa hali o'zgarmaydi.</p>
+<form method="post" action="/admin/restore/inspect" enctype="multipart/form-data" class="row grow">
+<input type="file" name="backup" required>
+<input name="passphrase" type="password" placeholder="Zaxira paroli (bo'sh bo'lsa serverdagi)" autocomplete="off">
+<button>Tekshirish</button></form></div>
+<div class="card"><div class="ch"><span class="ico">{{ i("clock") }}</span>Avtomatik nusxalar</div>
+<p class="sub">Har tiklashdan oldin joriy bazaning nusxasi olinadi. Xato qilsangiz, shu yerdan qaytarasiz.</p>
+{% for name, kb in snapshots %}<form method="post" action="/admin/restore/snapshot" class="row" style="margin:6px 0">
+<code>{{ name }}</code><span class="muted small">{{ kb }} KB</span><input type="hidden" name="name" value="{{ name }}"><button class="ghost sm">Tanlash</button></form>
+{% else %}<div class="empty">Hali nusxa yo'q</div>{% endfor %}</div>
+{% endif %}
+<p><a href="/admin">← Admin</a></p>
+{% endblock %}

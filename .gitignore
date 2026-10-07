@@ -5,6 +5,7 @@ saas.db
 test.db
 .pytest_cache/
 uploads/
+restore_data/
 *.db-journal
 .ruff_cache/
 .venv/

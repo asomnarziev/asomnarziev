@@ -66,3 +66,19 @@ class OriginCheckMiddleware:
                     await response(scope, receive, send)
                     return
         await self.app(scope, receive, send)
+
+
+class MaintenanceMiddleware:
+    """Baza almashtirilayotganda (`is_active()`) hamma so'rovga 503 qaytaradi; holat sahifalari va /healthz mustasno."""
+
+    ALLOWED = ("/healthz", "/admin/restore/status", "/admin/restore/progress")
+
+    def __init__(self, app, is_active):
+        self.app, self.is_active = app, is_active
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and self.is_active() and scope["path"] not in self.ALLOWED:
+            resp = JSONResponse({"detail": "Texnik ishlar: baza tiklanmoqda"}, status_code=503, headers={"Retry-After": "30"})
+            await resp(scope, receive, send)
+            return
+        await self.app(scope, receive, send)

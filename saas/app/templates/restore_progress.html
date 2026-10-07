@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block anon %}
+<div class="wrap" style="max-width:520px;margin:12vh auto;padding:0 16px"><div class="card">
+<h3 style="margin-top:0">Baza tiklanmoqda</h3>
+<p id="msg" class="muted">Boshlanmoqda…</p>
+<p id="done" class="ok" style="display:none">Tayyor. <a href="/login">Kirish</a></p>
+<p id="fail" class="err" style="display:none"></p>
+<p class="muted small">Sahifani yopmang. Bu bir necha daqiqa olishi mumkin.</p></div></div>
+{% endblock %}{% block scripts %}<script>
+(function poll(){fetch('/admin/restore/status',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(d){
+ if(d){document.getElementById('msg').textContent=d.message;
+  if(d.phase==='done'){document.getElementById('done').style.display='';return}
+  if(d.phase==='error'){var f=document.getElementById('fail');f.textContent=d.message+' (baza o‘zgarmagan)';f.style.display='';return}}
+ setTimeout(poll,1500)}).catch(function(){setTimeout(poll,1500)})})();
+</script>{% endblock %}

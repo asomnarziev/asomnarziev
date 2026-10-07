@@ -12,6 +12,16 @@ jobs:
     defaults:
       run:
         working-directory: saas
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pbx
+          POSTGRES_PASSWORD: pbx
+          POSTGRES_DB: pbxtest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pbx" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,6 +39,8 @@ jobs:
         run: shellcheck deploy/*.sh
       - name: Testlar
         run: pytest -q
+        env:
+          TEST_PG_URL: postgresql+psycopg2://pbx:pbx@127.0.0.1/pbxtest
       - name: Xavfsizlik (bandit)
         run: bandit -q -r app
       - name: Bog'liqliklar zaifligi (pip-audit)

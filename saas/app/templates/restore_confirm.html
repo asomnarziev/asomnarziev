@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% from "icons.html" import i %}{% set active="admin" %}{% block body %}
+<div class="head"><h1>Tiklashni tasdiqlang</h1><p>Manba: <code>{{ source }}</code></p></div>
+<div class="card"><div class="ch"><span class="ico">{{ i("check") }}</span>Zaxira tekshirildi</div>
+<table class="tbl"><tbody>
+{% for t, n in info.rows.items()|sort %}<tr><td><code>{{ t }}</code></td><td>{{ n }} ta yozuv</td></tr>{% endfor %}
+<tr><td>Hajmi (ochilgan)</td><td>{{ (info.size / 1024 / 1024)|round(1) }} MB</td></tr>
+{% if info.pg_version %}<tr><td>pg_dump</td><td>{{ info.pg_version }}</td></tr>{% endif %}
+</tbody></table>
+{% if info.keys_total and info.keys_ok < info.keys_total %}
+<p class="err"><b>Diqqat:</b> {{ info.keys_total }} ta OnlinePBX kalitdan faqat {{ info.keys_ok }} tasi joriy <code>SECRET_KEY</code> bilan ochiladi. Zaxira boshqa serverdan bo'lsa, <code>.env</code> dagi <code>SECRET_KEY</code> ni eskisiga qaytaring, aks holda mijozlar kalitni qayta kiritishi kerak bo'ladi.</p>
+{% elif info.keys_total %}<p class="ok">OnlinePBX kalitlari ({{ info.keys_total }}) joriy SECRET_KEY bilan ochiladi.</p>{% endif %}
+</div>
+<div class="card"><div class="ch"><span class="ico">{{ i("shield") }}</span>Joriy baza to'liq almashtiriladi</div>
+<p class="sub">Zaxiradan keyingi barcha o'zgarishlar (yangi mijozlar, qo'ng'iroqlar, to'lovlar) yo'qoladi. Boshlashdan oldin joriy bazaning nusxasi olinadi. Jarayonda sayt bir necha daqiqa «texnik ishlar» rejimida bo'ladi.</p>
+<form method="post" action="/admin/restore/run" onsubmit="return confirm('Baza almashtirilsinmi?')">
+<input type="hidden" name="token" value="{{ request.session.get('restore_token') }}">
+<label class="l">Tasdiqlash uchun <b>{{ phrase }}</b> deb yozing</label>
+<div class="row grow"><input name="confirm" autocomplete="off" required>
+<input name="password" type="password" placeholder="Admin parolingiz" autocomplete="current-password" required>
+<button class="danger">Tiklash</button></div></form>
+<p><a href="/admin/restore">Bekor qilish</a></p></div>
+{% endblock %}

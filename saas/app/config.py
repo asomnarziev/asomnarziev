@@ -86,3 +86,8 @@ MAX_PENDING_PAYMENTS = 3  # bitta mijozning kutilayotgan to'lovlari
 # ---------- Limitlar (suiiste'mol va OnlinePBX API limitidan himoya) ----------
 MAX_CALLS_PER_DAY = _int("MAX_CALLS_PER_DAY", 5000)  # bitta mijoz uchun kuniga qayta ishlanadigan qo'ng'iroqlar
 MAX_RECORD_FETCH_PER_HOUR = _int("MAX_RECORD_FETCH_PER_HOUR", 60)  # kabinetdan yozuvni qayta olish
+
+# ---------- Bazani panel orqali tiklash (xavfli amal: standart holatda o'chiq) ----------
+ALLOW_PANEL_RESTORE = _flag("ALLOW_PANEL_RESTORE", False)
+RESTORE_DIR = _env("RESTORE_DIR", "restore_data")  # yuklangan zaxira va tiklashdan oldingi avtomatik nusxalar
+RESTORE_KEEP_SNAPSHOTS = _int("RESTORE_KEEP_SNAPSHOTS", 3)

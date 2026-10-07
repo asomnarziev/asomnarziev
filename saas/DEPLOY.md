@@ -65,6 +65,25 @@ echo "BACKUP_PASSPHRASE=$(openssl rand -base64 24)" >> /opt/pbxbot/saas/.env && 
 ```
 Chiqqan parolni **parol menejerga yoki boshqa xavfsiz joyga ham nusxalang**: server yo'qolsa, usiz Telegramdagi zaxirani ochib bo'lmaydi. Parolsiz zaxira Telegramga yuborilmaydi (adminga ogohlantirish keladi), chunki unda mijozlar emaillari va qo'ng'iroq raqamlari bor. Telegram fayl chegarasi 50 MB: baza undan oshsa, ogohlantirish keladi.
 
+### Bazani panel orqali tiklash
+
+Standart holatda **o'chiq**. Kerak bo'lganda:
+
+```bash
+sudo apt install -y postgresql-client          # psql va pg_dump (install.sh o'rnatgan bo'lishi mumkin)
+echo "ALLOW_PANEL_RESTORE=1" >> /opt/pbxbot/saas/.env && systemctl restart pbxbot
+```
+Nginx'da `/admin/restore/inspect` uchun 45 MB limit bor (`deploy/nginx.conf`; `update.sh` dan keyin `nginx -t && systemctl reload nginx`).
+
+Admin panel → **Bazani tiklash**: Telegramdan kelgan `.enc` faylni yuklang (parol bo'sh qolsa, serverdagi `BACKUP_PASSPHRASE` ishlatiladi). Fayl **avval tekshiriladi** (shifr, to'liqlik, faqat jadval/ma'lumot buyruqlari, kerakli jadvallar) va nima tiklanishi ko'rsatiladi. Keyin `TIKLASH` so'zi va admin parolingiz so'raladi. Jarayon:
+
+1. Joriy bazaning nusxasi olinadi (`restore_data/snapshot_*.sql.gz`, oxirgi 3 tasi qoladi): xato qilsangiz, shu yerdan qaytarasiz.
+2. Sayt «texnik ishlar» (503) rejimiga o'tadi, fon vazifalari to'xtaydi.
+3. Baza **bitta tranzaksiyada** almashtiriladi: xato bo'lsa, hammasi bekor bo'ladi va baza avvalgidek qoladi.
+4. Natija adminning Telegramiga yuboriladi.
+
+**Eslatmalar.** Zaxiradagi OnlinePBX kalitlari `SECRET_KEY` bilan shifrlangan: boshqa serverga tiklasangiz, `.env` dagi `SECRET_KEY` ni eskisiga qaytaring (tasdiqlash sahifasi mos kelmasligini ogohlantiradi). Zaxiradan keyingi o'zgarishlar yo'qoladi. Yuklangan cheklar (`uploads/`) bazaga kirmaydi, ular `backup.sh` arxivida alohida. Tiklab bo'lgach `ALLOW_PANEL_RESTORE=0` qilib qo'ying. Ommaviy ishonch uchun tiklashni bir marta test bazada sinab ko'ring.
+
 Jadval `update.sh` bilan avtomatik yangilanadi. Server vaqt mintaqasi UTC ekanini tekshiring: `timedatectl | grep "Time zone"` (boshqacha bo'lsa, `deploy/pbxbot-backup.cron` dagi soatni moslang). Sinash: `bash /opt/pbxbot/saas/deploy/backup.sh` (Telegramga darrov keladi). Log: `/var/log/pbxbot-backup.log`.
 
 ```bash
