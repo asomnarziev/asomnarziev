@@ -115,4 +115,7 @@ Rasmiy limitlar noma'lum, shuning uchun ehtiyotkor standartlar (`.env` da sozlan
 
 - **Bitta uvicorn worker.** Jonli yangilanish, kunlik hisobot va tezlik chegaralari jarayon xotirasida. `systemd` xizmati shunday sozlangan (`--workers 1`).
 - Nginx orqasida ishlaydi: `--proxy-headers` real IP'ni beradi (kirish himoyasi shunga tayanadi).
+- nginx versiyasini yashiring (xavfsizlik skanerlari buni kamchilik deb ko'rsatadi):
+  `grep -q '^\s*server_tokens off' /etc/nginx/nginx.conf || sed -i '/^http {/a\    server_tokens off;' /etc/nginx/nginx.conf && nginx -t && systemctl reload nginx`.
+  Yangilanishlar: `apt-get update && apt-get install --only-upgrade nginx`.
 - Xizmat `NoNewPrivileges`, `ProtectSystem=full`, `ProtectHome` va boshqa systemd cheklovlari bilan ishlaydi.
