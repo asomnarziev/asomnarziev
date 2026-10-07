@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% from "icons.html" import i %}{% set active="billing" %}{% block body %}
-<div class="head"><div><h1>Tarif</h1><p>Obunangiz va mavjud tariflar</p></div>
-<div class="row"><span class="muted">Amal qiladi:</span><b>{{ acc.valid_until.strftime("%d.%m.%Y") }}</b>
-{% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</div></div>
+<div class="head"><h1>Tarif</h1><p>Obunangiz va mavjud tariflar</p></div>
+<div class="row" style="margin-bottom:14px"><span class="muted">Amal qiladi:</span><b>{{ acc.valid_until.strftime("%d.%m.%Y") }}</b>
+{% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</div>
 <div class="plans">
 {% for k,p in plans.items() %}<div class="card plan {{ 'pop' if k=='pro' }}">{% if k=='pro' %}<span class="tag">Mashhur</span>{% endif %}
 <h3 style="margin:0">{{ p.name }}</h3>

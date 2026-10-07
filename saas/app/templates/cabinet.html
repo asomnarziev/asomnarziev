@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% from "icons.html" import i %}{% set active="cabinet" %}{% block body %}
 {% set pbx_ok = acc.pbx_domain and acc.pbx_key_enc %}{% set chat_ok = acc.chats|length > 0 %}{% set hook_ok = acc.logs|length > 0 %}
 {% set done = (1 if pbx_ok else 0) + (1 if chat_ok else 0) + (1 if hook_ok else 0) %}
-<div class="head"><div><h1>Kabinet</h1><p>OnlinePBX yozuvlarini Telegramga yuborishni sozlang</p></div></div>
+<div class="head"><h1>Kabinet</h1><p>OnlinePBX yozuvlarini Telegramga yuborishni sozlang</p></div>
 
 <div class="stats">
  <div class="stat"><div class="ico">{{ i("shield") }}</div><div><small>Obuna</small><b>{% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</b></div></div>
@@ -12,9 +12,9 @@
 {% if done < 3 %}<div class="card"><h3>Sozlash bosqichlari <span class="muted small" style="font-weight:500">{{ done }}/3</span></h3>
  <div class="prog"><div style="width:{{ (done*100/3)|round|int }}%"></div></div>
  <div class="steps">
-  <div class="step {{ 'done' if pbx_ok }}"><div class="dot">{{ i("check",12) if pbx_ok else "1" }}</div><div><b>OnlinePBX ulash</b><span>Domen va API kalit</span></div></div>
-  <div class="step {{ 'done' if chat_ok }}"><div class="dot">{{ i("check",12) if chat_ok else "2" }}</div><div><b>Telegram chat</b><span>Botni chatga ulash</span></div></div>
-  <div class="step {{ 'done' if hook_ok }}"><div class="dot">{{ i("check",12) if hook_ok else "3" }}</div><div><b>Webhook</b><span>OnlinePBX'ga manzilni kiriting</span></div></div>
+  <div class="step {{ 'done' if pbx_ok }}"><div class="dot">{{ "✓" if pbx_ok else "1" }}</div><div><b>OnlinePBX ulash</b><span>Domen va API kalit</span></div></div>
+  <div class="step {{ 'done' if chat_ok }}"><div class="dot">{{ "✓" if chat_ok else "2" }}</div><div><b>Telegram chat</b><span>Botni chatga ulash</span></div></div>
+  <div class="step {{ 'done' if hook_ok }}"><div class="dot">{{ "✓" if hook_ok else "3" }}</div><div><b>Webhook</b><span>OnlinePBX'ga manzilni kiriting</span></div></div>
  </div></div>{% endif %}
 
 <div class="card"><div class="ch"><span class="ico">{{ i("phone") }}</span>OnlinePBX</div>
@@ -24,7 +24,7 @@
 <input name="key" type="password" placeholder="{{ 'API kalit saqlangan (o‘zgartirish uchun kiriting)' if acc.pbx_key_enc else 'API kalit' }}">
 <button>Saqlash</button></form>
 <h4 style="margin:18px 0 6px;font-size:.95rem">Webhook manzilingiz</h4>
-<div class="code"><code id="hook">{{ hook_url }}</code><button type="button" onclick="copyText('hook')">{{ i("copy",14) }}Nusxalash</button></div>
+<div class="code"><span class="m">POST</span><code id="hook">{{ hook_url }}</code><button type="button" onclick="copyText('hook')">{{ i("copy",14) }}Nusxalash</button></div>
 <p class="muted small" style="margin:8px 0 12px">OnlinePBX → Sozlamalar → Integratsiya → Webhook'larda yangi webhook qo'shib, shu manzilni kiriting
 (hodisa: qo'ng'iroq tugashi / yozuv tayyor bo'lishi; usul: POST). Manzil faqat sizniki — hech kimga bermang.</p>
 <div class="row"><span class="muted">Oxirgi webhook:</span>
@@ -52,10 +52,9 @@
 </div>
 
 <div class="card"><div class="ch"><span class="ico">{{ i("clock") }}</span>So'nggi qo'ng'iroqlar</div>
-<p class="sub">Webhook orqali kelgan oxirgi 20 ta hodisa</p>
-<div class="scroll"><table class="tbl"><thead><tr><th>Vaqt (UTC)</th><th>ID</th><th>Holat</th><th class="hide-sm">Izoh</th></tr></thead><tbody>
-{% for l in acc.logs[:20] %}<tr><td>{{ l.created_at.strftime("%d.%m %H:%M") }}</td><td><code>{{ l.uuid[:8] }}</code></td>
-<td><span class="badge {{ 'ok' if l.status=='sent' else ('err' if l.status=='error' else 'warn') }}">{{ l.status }}</span></td>
-<td class="muted hide-sm">{{ l.error }}</td></tr>
-{% else %}<tr><td colspan="4" class="empty">{{ i("phone",26) }}Hali qo'ng'iroq kelmagan</td></tr>{% endfor %}</tbody></table></div></div>
+<p class="sub">Webhook orqali kelgan oxirgi 20 ta hodisa (UTC)</p>
+<div class="term">
+{% for l in acc.logs[:20] %}<div class="ln"><span class="t">[{{ l.created_at.strftime("%d.%m %H:%M:%S") }}]</span> <span class="s {{ 'ok' if l.status=='sent' else ('err' if l.status=='error' else 'warn') }}">{{ l.status.ljust(7) }}</span> <span class="id">{{ l.uuid[:8] }}</span>{% if l.error %} <span class="e">{{ l.error }}</span>{% endif %}</div>
+{% else %}<div class="ln"><span class="prompt">$</span> tail -f calls.log</div><div class="ln t">hali qo'ng'iroq kelmagan… <span class="cur"></span></div>{% endfor %}
+</div></div>
 {% endblock %}

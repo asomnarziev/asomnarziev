@@ -1,15 +1,16 @@
 {% extends "base.html" %}{% from "icons.html" import i %}{% block anon %}
 <div class="authwrap">
  <div class="hero">
-  <div class="logo" style="padding:0"><i>{{ i("send",16) }}</i>PBX → Telegram</div>
-  <div>
-   <h2>Qo'ng'iroq yozuvlari — darrov Telegramingizda</h2>
-   <p>OnlinePBX'dagi har bir suhbat yozuvi tayyor shablon bilan, o'zbek yoki rus tilida chatingizga keladi.</p>
-   <ul><li>{{ i("check") }}Shaxsiy chat, guruh va kanalga yuborish</li>
-       <li>{{ i("check") }}Har chat uchun alohida til</li>
-       <li>{{ i("check") }}Har mijozga o'z webhook manzili</li></ul>
-  </div>
-  <div class="flow">OnlinePBX {{ i("link",14) }} Server {{ i("link",14) }} Telegram</div>
+  <div class="logo"><i>&gt;_</i>pbx→tg</div>
+  <h2>Qo'ng'iroq yozuvlari — darrov Telegramingizda</h2>
+  <p>OnlinePBX'dagi har bir suhbat yozuvi tayyor shablon bilan, o'zbek yoki rus tilida chatingizga keladi.</p>
+  <div class="win"><div class="bar"><i></i><i></i><i></i><span>pbx-listen — webhook</span></div>
+<pre><span class="g">$</span> pbx listen --webhook
+<span class="c"># OnlinePBX → server → Telegram</span>
+<span class="b">→</span> call.ended   uuid=<span class="o">cc04aa75</span>
+<span class="b">→</span> fetch.record <span class="g">✔</span> 87.7 KB
+<span class="b">→</span> telegram.send chat=<span class="o">-100…</span> lang=<span class="o">uz</span>
+<span class="g">✔ delivered</span> in 1.2s <span class="g">▌</span></pre></div>
  </div>
  <div class="formside"><div class="formbox">
  {% if mode=="closed" %}
