@@ -5,14 +5,8 @@ DEFAULT_LANG = "uz"
 
 TEMPLATES = {
     "uz": {
-        "call": (
-            "📞 <b>Qo'ng'iroq yozuvi</b>\n"
-            "Yo'nalish: {direction}\n"
-            "Kimdan: <code>{caller}</code>\n"
-            "Kimga: <code>{callee}</code>\n"
-            "Sana: {date}\n"
-            "Davomiyligi: {duration}"
-        ),
+        "title": "Qo'ng'iroq yozuvi",
+        "labels": {"direction": "yo'nalish", "caller": "kimdan", "callee": "kimga", "date": "sana", "duration": "davomiyligi"},
         "direction": {"inbound": "⬇️ Kiruvchi", "outbound": "⬆️ Chiquvchi", "local": "🔁 Ichki"},
         "unknown": "Noma'lum",
         "start": "Tilni tanlang / Выберите язык:",
@@ -23,14 +17,8 @@ TEMPLATES = {
         "limit": "⚠️ Chatlar limiti tugagan. Tarifni yangilang.",
     },
     "ru": {
-        "call": (
-            "📞 <b>Запись звонка</b>\n"
-            "Направление: {direction}\n"
-            "От: <code>{caller}</code>\n"
-            "Кому: <code>{callee}</code>\n"
-            "Дата: {date}\n"
-            "Длительность: {duration}"
-        ),
+        "title": "Запись звонка",
+        "labels": {"direction": "направление", "caller": "от", "callee": "кому", "date": "дата", "duration": "длительность"},
         "direction": {"inbound": "⬇️ Входящий", "outbound": "⬆️ Исходящий", "local": "🔁 Внутренний"},
         "unknown": "Неизвестно",
         "start": "Tilni tanlang / Выберите язык:",
@@ -50,6 +38,7 @@ def fmt_duration(seconds: int) -> str:
 
 
 import os
+from html import escape
 from datetime import datetime, timedelta, timezone
 
 # Server UTC'da ishlaydi; xabarlarda mijozning mahalliy vaqti ko'rsatiladi (Toshkent = UTC+5)
@@ -69,13 +58,16 @@ def audio_name(call: dict) -> str:
 
 
 def render_call(lang: str, call: dict) -> str:
+    """Terminal uslubidagi xabar: sarlavha `$ ...` va monospace, tekislangan qatorlar (Telegram HTML)."""
     t = TEMPLATES.get(lang) or TEMPLATES[DEFAULT_LANG]
     dt = local_time(call.get("start_stamp"))
-    date = dt.strftime("%d.%m.%Y %H:%M:%S") if dt else t["unknown"]
-    return t["call"].format(
-        direction=t["direction"].get(call.get("accountcode"), t["unknown"]),
-        caller=call.get("caller_id_number") or t["unknown"],
-        callee=call.get("destination_number") or t["unknown"],
-        date=date,
-        duration=fmt_duration(call.get("duration", 0)),
-    )
+    values = {
+        "direction": t["direction"].get(call.get("accountcode"), t["unknown"]),
+        "caller": call.get("caller_id_number") or t["unknown"],
+        "callee": call.get("destination_number") or t["unknown"],
+        "date": dt.strftime("%d.%m.%Y %H:%M:%S") if dt else t["unknown"],
+        "duration": fmt_duration(call.get("duration", 0)),
+    }
+    width = max(len(v) for v in t["labels"].values())
+    rows = "\n".join(f"{t['labels'][k].ljust(width)} : {escape(str(v))}" for k, v in values.items())
+    return f"📞 <b>$ {t['title']}</b>\n<pre>{rows}</pre>"
