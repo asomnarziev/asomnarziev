@@ -10,6 +10,7 @@ TG_WEBHOOK_SECRET = os.environ.get("TG_WEBHOOK_SECRET", "tg-secret")
 CONTACT_TELEGRAM = os.environ.get("CONTACT_TELEGRAM", "asom_narziev")
 CONTACT_PHONE = os.environ.get("CONTACT_PHONE", "+998948302407")
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "asomnarziev07@gmail.com")
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))
 
 # narx so'mda; days — obuna muddati; features — tarifga ochiladigan imkoniyatlar; perks — tarif kartasida ko'rsatiladigan ro'yxat

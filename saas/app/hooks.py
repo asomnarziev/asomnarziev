@@ -1,3 +1,4 @@
+import hmac
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -46,7 +47,7 @@ async def pbx_hook(token: str, request: Request, bg: BackgroundTasks, db: Sessio
 
 @router.post("/tg/{secret}")
 async def tg_hook(secret: str, request: Request, db: Session = Depends(get_db)):
-    if secret != config.TG_WEBHOOK_SECRET:
+    if not hmac.compare_digest(secret.encode(), config.TG_WEBHOOK_SECRET.encode()):  # vaqt orqali taxmin qilib bo'lmasin
         raise HTTPException(404)
     try:
         service.handle_update(db, await request.json())
