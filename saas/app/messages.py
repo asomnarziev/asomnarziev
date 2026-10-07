@@ -21,6 +21,8 @@ TEMPLATES = {
         "linked": "✅ Chat ulandi. Tilni kabinetdan o'zgartirishingiz mumkin (hozir: O'zbekcha).",
         "bad_code": "⛔ Kod noto'g'ri. Kabinetdagi havoladan foydalaning.",
         "limit": "⚠️ Chatlar limiti tugagan. Tarifni yangilang.",
+        "pay_ok": "✅ To'lovingiz tasdiqlandi. Obuna {until} gacha faol.",
+        "pay_no": "❌ To'lov tasdiqlanmadi. Sababni kabinetdagi «Tarif» sahifasida ko'ring.",
     },
     "ru": {
         "call": (
@@ -39,6 +41,8 @@ TEMPLATES = {
         "linked": "✅ Chat ulandi / Чат подключён. Язык меняется в кабинете.",
         "bad_code": "⛔ Неверный код. Используйте ссылку из кабинета.",
         "limit": "⚠️ Лимит чатов исчерпан. Обновите тариф.",
+        "pay_ok": "✅ Ваш платёж подтверждён. Подписка активна до {until}.",
+        "pay_no": "❌ Платёж не подтверждён. Причину смотрите в кабинете на странице «Тариф».",
     },
 }
 

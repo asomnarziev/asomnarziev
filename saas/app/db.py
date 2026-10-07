@@ -18,3 +18,20 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+_PAYMENT_COLUMNS = {"months": "INTEGER DEFAULT 1", "receipt": "VARCHAR(100) DEFAULT ''", "note": "TEXT DEFAULT ''"}
+
+
+def init_db():
+    """Jadvallarni yaratadi va eski bazaga yangi ustunlarni qo'shadi (Alembic o'rniga yengil migratsiya)."""
+    from sqlalchemy import inspect, text
+
+    Base.metadata.create_all(engine)
+    insp = inspect(engine)
+    if insp.has_table("payments"):
+        have = {c["name"] for c in insp.get_columns("payments")}
+        with engine.begin() as conn:
+            for name, ddl in _PAYMENT_COLUMNS.items():
+                if name not in have:
+                    conn.execute(text(f"ALTER TABLE payments ADD COLUMN {name} {ddl}"))

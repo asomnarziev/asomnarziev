@@ -68,3 +68,18 @@ OnlinePBX'ning rasmiy limitlari bizga noma'lum, shuning uchun kod ehtiyotkor ish
 - Bir mijoz uchun kuniga `MAX_CALLS_PER_DAY` dan ortiq qo'ng'iroq qayta ishlanmaydi (`skipped`).
 - Bir xil qo'ng'iroq (uuid) ikkinchi marta so'ralmaydi.
 OnlinePBX qo'llab-quvvatlashidan haqiqiy limitni so'rab, shu qiymatlarni moslang. Kesh jarayon xotirasida: ilovani **bitta** uvicorn worker bilan ishlating (hozirgi systemd sozlamasi shunday).
+
+## Kartaga o'tkazma orqali to'lov
+Mijoz `/billing` sahifasida karta raqamini ko'radi, pulni o'tkazib chekni (JPG/PNG/WEBP/PDF) yuklaydi. Sizga Telegramda chek rasmi va **✅ Tasdiqlash / ❌ Rad etish** tugmalari bilan eslatma keladi; mijozga natija haqida uning chatiga xabar boradi. Saytdagi `/admin` ham ishlaydi.
+
+Sozlash (`.env`):
+- `PAYMENT_CARD` — karta raqami, `PAYMENT_CARD_HOLDER` — karta egasi.
+- `ADMIN_CHAT_ID` — sizning **shaxsiy** chat ID'ingiz: botga `/id` yozing, bot raqamni qaytaradi. Avval botga `/start` bosib qo'ying, aks holda bot sizga yoza olmaydi. Faqat shu chatdagi tugmalar ishlaydi (guruh emas, shaxsiy chat tavsiya etiladi).
+- Cheklar `saas/uploads/` papkasiga tushadi (zaxiraga qo'shing); ular faqat egasi va adminga ko'rinadi.
+
+Yangilashda bir marta:
+```bash
+sed -i 's/client_max_body_size 5m/client_max_body_size 12m/' /etc/nginx/sites-available/pbxbot && nginx -t && systemctl reload nginx
+cd /opt/pbxbot/saas && set -a && . ./.env && set +a && /opt/pbxbot/venv/bin/python -m app.setup_webhook   # tugmalar uchun callback_query yoqiladi
+```
+Baza avtomatik yangilanadi (`payments` jadvaliga ustunlar qo'shiladi).

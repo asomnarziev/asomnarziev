@@ -23,6 +23,24 @@ def send_audio(chat_id, caption, audio: bytes, filename: str):
                  files={"audio": (filename, audio, "audio/mpeg")})
 
 
+def send_file(chat_id, caption, data: bytes, filename: str, mime: str, markup=None):
+    """Chek: rasm bo'lsa sendPhoto, aks holda (PDF) sendDocument; ostida inline tugmalar."""
+    method, field = ("sendPhoto", "photo") if mime.startswith("image/") else ("sendDocument", "document")
+    form = {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"}
+    if markup:
+        form["reply_markup"] = json.dumps(markup)
+    return _call(method, data=form, files={field: (filename, data, mime)})
+
+
+def answer_callback(cb_id, text):
+    return _call("answerCallbackQuery", data={"callback_query_id": cb_id, "text": text})
+
+
+def clear_buttons(chat_id, message_id):
+    return _call("editMessageReplyMarkup", data={"chat_id": chat_id, "message_id": message_id,
+                                                  "reply_markup": json.dumps({"inline_keyboard": []})})
+
+
 def set_webhook():
     url = f"{config.BASE_URL}/tg/{config.TG_WEBHOOK_SECRET}"
-    return _call("setWebhook", data={"url": url, "allowed_updates": json.dumps(["message", "channel_post"])})
+    return _call("setWebhook", data={"url": url, "allowed_updates": json.dumps(["message", "channel_post", "callback_query"])})

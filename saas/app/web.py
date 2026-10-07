@@ -1,12 +1,12 @@
 from datetime import timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from . import config, service, telegram
+from . import config, receipts, service, telegram
 from .db import get_db
 from .messages import LANGS, TEMPLATES
 from .models import Account, Chat, Payment, User, now, token
@@ -147,19 +147,54 @@ def chat_delete(chat_pk: int, user: User = Depends(require_user), db: Session = 
     return go("/cabinet")
 
 
+MONTHS = (1, 3, 6, 12)
+
+
 @router.get("/billing")
-def billing(request: Request, user: User = Depends(require_user)):
-    return render(request, "billing.html", user=user, acc=user.account, plans=config.PLANS)
+def billing(request: Request, error: str | None = None, ok: str | None = None, user: User = Depends(require_user),
+            db: Session = Depends(get_db)):
+    acc = user.account
+    history = db.query(Payment).filter(Payment.account_id == acc.id).order_by(Payment.id.desc()).limit(10).all()
+    return render(request, "billing.html", user=user, acc=acc, plans=config.PLANS, months=MONTHS, history=history,
+                  error=error, ok=ok, amount=service.payment_amount, max_mb=config.MAX_RECEIPT_MB)
 
 
 @router.post("/billing/checkout")
-def checkout(plan: str = Form(...), user: User = Depends(require_user), db: Session = Depends(get_db)):
-    if plan not in config.PLANS:
+async def checkout(bg: BackgroundTasks, plan: str = Form(...), months: int = Form(1), receipt: UploadFile = File(...),
+                   user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Mijoz kartaga o'tkazgach chekni yuklaydi: to'lov 'pending' bo'ladi, adminga Telegramda eslatma ketadi."""
+    acc = user.account
+    if plan not in config.PLANS or months not in MONTHS:
         raise HTTPException(400)
-    p = Payment(account_id=user.account.id, plan=plan, amount=config.PLANS[plan]["price"], provider="manual")
+    pending = db.query(Payment).filter_by(account_id=acc.id, status="pending").count()
+    if pending >= config.MAX_PENDING_PAYMENTS:
+        return go("/billing?error=Kutilayotgan+to%27lovlaringiz+ko%27p.+Administrator+tasdiqlashini+kuting")
+    try:
+        name = receipts.save(await receipt.read(config.MAX_RECEIPT_MB * 1024 * 1024 + 1))
+    except receipts.ReceiptError as e:
+        from urllib.parse import quote_plus
+        return go(f"/billing?error={quote_plus(str(e))}")
+    p = Payment(account_id=acc.id, plan=plan, months=months, amount=config.PLANS[plan]["price"] * months,
+                provider="card", receipt=name)
     db.add(p)
     db.commit()
-    return go("/billing")
+    bg.add_task(service.notify_admin_payment, p.id)
+    return go("/billing?ok=1")
+
+
+@router.get("/receipt/{pid}")
+def receipt_file(pid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    p = db.get(Payment, pid)
+    if not p or not p.receipt or not (user.is_admin or p.account_id == user.account.id):
+        raise HTTPException(404)
+    try:
+        path = receipts.path(p.receipt)
+    except FileNotFoundError:
+        raise HTTPException(404)
+    # Yuklangan fayl hech qachon sahifa sifatida bajarilmasin
+    return FileResponse(path, media_type=receipts.mime(p.receipt), headers={
+        "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Content-Disposition": "inline", "Cache-Control": "private, no-store"})
 
 
 def admin_page(request: Request, db: Session, user: User, error=None, created=None):
@@ -167,7 +202,7 @@ def admin_page(request: Request, db: Session, user: User, error=None, created=No
                   accounts=db.query(Account).order_by(Account.id.desc()).all(),
                   payments=db.query(Payment).filter_by(status="pending").all(),
                   history=db.query(Payment).filter(Payment.status == "paid").order_by(Payment.id.desc()).limit(20).all(),
-                  plans=config.PLANS)
+                  plans=config.PLANS, amount=service.payment_amount)
 
 
 @router.get("/admin")
@@ -229,11 +264,27 @@ def admin_set_password(aid: int, password: str = Form(...), _: User = Depends(re
 
 
 @router.post("/admin/payment/{pid}/confirm")
-def admin_confirm(pid: int, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+def admin_confirm(pid: int, bg: BackgroundTasks, _: User = Depends(require_admin), db: Session = Depends(get_db)):
     p = db.get(Payment, pid)
     if not p:
         raise HTTPException(404)
+    was_pending = p.status == "pending"
     service.confirm_payment(db, p)
+    if was_pending:
+        bg.add_task(service.notify_customer, p.account_id, True)
+    return go("/admin")
+
+
+@router.post("/admin/payment/{pid}/reject")
+def admin_reject(pid: int, bg: BackgroundTasks, note: str = Form(""), _: User = Depends(require_admin),
+                 db: Session = Depends(get_db)):
+    p = db.get(Payment, pid)
+    if not p:
+        raise HTTPException(404)
+    was_pending = p.status == "pending"
+    service.reject_payment(db, p, note)
+    if was_pending:
+        bg.add_task(service.notify_customer, p.account_id, False)
     return go("/admin")
 
 

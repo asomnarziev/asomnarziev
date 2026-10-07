@@ -376,3 +376,146 @@ def test_admin_manages_subscription(client):
     cust = TestClient(app)
     cust.post("/login", data={"email": "c@x.uz", "password": "parol12345"})
     assert cust.post(f"/admin/account/{aid}/subscription", data={"action": "extend", "plan": "pro", "days": "30"}).status_code == 403
+
+
+# ---------- Kartaga o'tkazma to'lovi ----------
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+@pytest.fixture()
+def pay(client, tmp_path, monkeypatch):
+    from app import config
+    monkeypatch.setattr(config, "UPLOAD_DIR", str(tmp_path / "up"))
+    monkeypatch.setattr(config, "ADMIN_CHAT_ID", "555")
+    monkeypatch.setattr(config, "PAYMENT_CARD", "8600123412341234")
+    sent = []
+    monkeypatch.setattr(telegram, "send_file", lambda chat, cap, data, name, mime, markup=None: sent.append((chat, cap, mime, markup)))
+    monkeypatch.setattr(telegram, "send_message", lambda chat, text, markup=None: sent.append((chat, text, None, markup)))
+    monkeypatch.setattr(telegram, "answer_callback", lambda *a: sent.append(("cb", a[1])))
+    monkeypatch.setattr(telegram, "clear_buttons", lambda *a: None)
+    return sent
+
+
+def upload(c, data=PNG, name="chek.png", plan="pro", months="3"):
+    return c.post("/billing/checkout", data={"plan": plan, "months": months}, files={"receipt": (name, data, "image/png")},
+                  follow_redirects=False)
+
+
+def test_receipt_upload_creates_pending_and_notifies_admin(client, pay):
+    from app.models import Payment
+    register(client, "c@x.uz")
+    assert "8600123412341234" in client.get("/billing").text
+    r = upload(client)
+    assert r.status_code == 303 and "ok=1" in r.headers["location"]
+    with SessionLocal() as db:
+        p = db.query(Payment).one()
+        assert (p.status, p.plan, p.months, p.amount, p.provider) == ("pending", "pro", 3, 249000 * 3, "card")
+        assert p.receipt.endswith(".png")
+    chat, caption, mime, markup = pay[0]
+    assert chat == "555" and "c@x.uz" in caption and "747 000" in caption and mime == "image/png"
+    assert [b["callback_data"] for b in markup["inline_keyboard"][0]] == ["pay:ok:1", "pay:no:1"]
+    assert "tekshirilmoqda" in client.get("/billing").text
+
+
+def test_receipt_rejects_bad_files_and_pending_limit(client, pay):
+    from app.models import Payment
+    register(client, "c@x.uz")
+    assert "Faqat+JPG" in upload(client, b"<script>alert(1)</script>", "x.png").headers["location"]
+    assert "Faqat+JPG" in upload(client, b"GIF89a....", "x.png").headers["location"]
+    assert "katta" in __import__("urllib.parse").parse.unquote_plus(upload(client, PNG + b"0" * (8 * 1024 * 1024), "big.png").headers["location"])
+    assert client.post("/billing/checkout", data={"plan": "bad", "months": "1"}, files={"receipt": ("a.png", PNG)}).status_code == 400
+    assert client.post("/billing/checkout", data={"plan": "pro", "months": "7"}, files={"receipt": ("a.png", PNG)}).status_code == 400
+    for _ in range(3):
+        upload(client)
+    assert "ko%27p" in upload(client).headers["location"]
+    with SessionLocal() as db:
+        assert db.query(Payment).count() == 3
+
+
+def test_receipt_access_control(client, pay):
+    register(client, "admin@x.uz")
+    owner, other = TestClient(app), TestClient(app)
+    register(owner, "o@x.uz"); register(other, "z@x.uz")
+    upload(owner)
+    assert owner.get("/receipt/1").headers["content-type"] == "image/png"
+    r = client.get("/receipt/1")  # admin ko'ra oladi
+    assert r.status_code == 200 and r.headers["x-content-type-options"] == "nosniff" and "sandbox" in r.headers["content-security-policy"]
+    assert other.get("/receipt/1").status_code == 404
+    assert TestClient(app).get("/receipt/1", follow_redirects=False).status_code == 303
+    assert client.get("/receipt/999").status_code == 404
+
+
+def test_admin_confirm_and_reject_with_months(client, pay):
+    from app.models import Payment
+    register(client, "admin@x.uz")
+    cust = TestClient(app); register(cust, "c@x.uz")
+    cust.post("/cabinet/chat", data={"chat_id": "42", "lang": "ru"})
+    upload(cust, months="3"); upload(cust, months="1")
+    assert "Chekni ko" in client.get("/admin").text
+    pay.clear()
+    client.post("/admin/payment/1/confirm")
+    with SessionLocal() as db:
+        acc = db.query(Account).filter_by(id=2).one()
+        assert 89 <= (acc.paid_until - now()).days <= 90 and acc.plan == "pro"  # 3 oy = 90 kun
+        assert db.get(Payment, 1).status == "paid"
+    assert any(c == "42" and "подтверждён" in t for c, t, *_ in pay if t)  # mijoz chatiga ruscha xabar
+    client.post("/admin/payment/2/reject", data={"note": "Summa kam"})
+    with SessionLocal() as db:
+        p = db.get(Payment, 2)
+        assert (p.status, p.note) == ("rejected", "Summa kam")
+    assert "Summa kam" in cust.get("/billing").text
+    client.post("/admin/payment/1/confirm")  # takror tasdiqlash obunani yana uzaytirmaydi
+    with SessionLocal() as db:
+        assert (db.get(Account, 2).paid_until - now()).days <= 90
+
+
+def test_telegram_admin_buttons(client, pay):
+    from app.models import Payment
+    register(client, "admin@x.uz")
+    cust = TestClient(app); register(cust, "c@x.uz")
+    upload(cust); upload(cust)
+    cb = lambda data, chat: {"callback_query": {"id": "9", "data": data, "message": {"message_id": 7, "chat": {"id": chat}}}}
+    client.post("/tg/tg-secret", json=cb("pay:ok:1", 999))   # begona chat: e'tiborsiz
+    with SessionLocal() as db:
+        assert db.get(Payment, 1).status == "pending"
+    client.post("/tg/tg-secret", json=cb("pay:ok:1", 555))
+    client.post("/tg/tg-secret", json=cb("pay:no:2", 555))
+    client.post("/tg/tg-secret", json=cb("pay:ok:2", 555))   # allaqachon ko'rib chiqilgan
+    with SessionLocal() as db:
+        assert db.get(Payment, 1).status == "paid" and db.get(Payment, 2).status == "rejected"
+
+
+def test_id_command_and_no_admin_chat(client, monkeypatch):
+    from app import config
+    out = []
+    monkeypatch.setattr(telegram, "send_message", lambda chat, text, markup=None: out.append((chat, text)))
+    client.post("/tg/tg-secret", json={"message": {"text": "/id", "chat": {"id": 12345}}})
+    assert out == [("12345", "Chat ID: <code>12345</code>")]
+    monkeypatch.setattr(config, "ADMIN_CHAT_ID", "")
+    service.notify_admin_payment(1)  # sozlanmagan bo'lsa jim o'tadi
+    assert len(out) == 1
+
+
+def test_db_migration_adds_payment_columns(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, inspect, text
+    from app import db as dbm
+    eng = create_engine(f"sqlite:///{tmp_path/'old.db'}")
+    with eng.begin() as c:
+        c.execute(text("CREATE TABLE payments (id INTEGER PRIMARY KEY, account_id INTEGER, plan VARCHAR(20), amount INTEGER, provider VARCHAR(20), status VARCHAR(20), created_at DATETIME)"))
+        c.execute(text("INSERT INTO payments (account_id, plan, amount, provider, status) VALUES (1,'pro',1,'manual','paid')"))
+    monkeypatch.setattr(dbm, "engine", eng)
+    dbm.init_db()
+    dbm.init_db()  # ikkinchi marta zararsiz
+    assert {"months", "receipt", "note"} <= {c["name"] for c in inspect(eng).get_columns("payments")}
+    with eng.connect() as c:
+        assert c.execute(text("SELECT months, receipt FROM payments")).one() == (1, "")
+
+
+def test_receipts_path_traversal(tmp_path, monkeypatch):
+    from app import config, receipts
+    monkeypatch.setattr(config, "UPLOAD_DIR", str(tmp_path / "up"))
+    name = receipts.save(PNG)
+    assert receipts.path(name).is_file()
+    for bad in ("../x.png", "/etc/passwd", "a/../../b.png"):
+        with pytest.raises(FileNotFoundError):
+            receipts.path(bad)

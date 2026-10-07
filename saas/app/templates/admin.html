@@ -12,10 +12,17 @@
 <form method="post" action="/admin/user" class="row grow"><input name="email" type="email" placeholder="Mijoz emaili (login)" required>
 <input name="password" placeholder="Parol (kamida 8)" minlength="8" required><button>Yaratish</button></form></div>
 
-<div class="card"><div class="ch"><span class="ico">{{ i("card") }}</span>Kutilayotgan to'lovlar</div><div class="scroll" style="margin-top:10px"><table class="tbl"><tbody>
-{% for p in payments %}<tr><td>{{ p.account.user.email }}</td><td><span class="badge">{{ p.plan }}</span></td><td>{{ "{:,}".format(p.amount).replace(",", " ") }} so'm</td>
-<td style="text-align:right"><form method="post" action="/admin/payment/{{ p.id }}/confirm"><button class="sm">{{ i("check",14) }}Tasdiqlash</button></form></td></tr>
-{% else %}<tr><td class="empty">{{ i("check",26) }}Kutilayotgan to'lov yo'q</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><div class="ch"><span class="ico">{{ i("card") }}</span>Kutilayotgan to'lovlar</div>
+{% for p in payments %}<div class="pay">
+ <div class="top"><div><b>{{ p.account.user.email }}</b><br><span class="muted small">{{ p.created_at.strftime("%d.%m.%Y %H:%M") }} UTC</span></div>
+ <div><span class="badge">{{ plans[p.plan].name }}</span> <span class="muted">× {{ p.months }} oy</span></div>
+ <div><b style="font:700 1.05rem var(--mono)">{{ "{:,}".format(amount(p)).replace(",", " ") }}</b> <span class="muted">so'm</span></div>
+ <div>{% if p.receipt %}<a href="/receipt/{{ p.id }}" target="_blank" rel="noopener">{{ i("link",14) }} Chekni ko'rish</a>{% else %}<span class="muted">chek yo'q</span>{% endif %}</div></div>
+ <div class="acts">
+  <form method="post" action="/admin/payment/{{ p.id }}/confirm"><button class="sm">{{ i("check",14) }}Tasdiqlash</button></form>
+  <form method="post" action="/admin/payment/{{ p.id }}/reject" class="row" style="flex-wrap:nowrap"><input class="sm" name="note" placeholder="Rad etish sababi (ixtiyoriy)" size="26"><button class="danger sm">Rad etish</button></form>
+ </div></div>
+{% else %}<div class="empty">{{ i("check",26) }}Kutilayotgan to'lov yo'q</div>{% endfor %}</div>
 
 <div class="card"><div class="ch"><span class="ico">{{ i("users") }}</span>Mijozlar</div>
 <div class="cust-list">

@@ -3,7 +3,7 @@
 """
 import sys
 
-from .db import Base, SessionLocal, engine
+from .db import SessionLocal, init_db
 from .models import Account, User
 from .security import hash_password
 
@@ -13,7 +13,7 @@ def main(argv):
     if len(args) != 2 or len(args[1]) < 8:
         sys.exit("Foydalanish: python -m app.create_user email PAROL(kamida 8 belgi) [--admin]")
     email, password = args[0].strip().lower(), args[1]
-    Base.metadata.create_all(engine)
+    init_db()
     with SessionLocal() as db:
         user = db.query(User).filter_by(email=email).first()
         if user:  # mavjud bo'lsa: parolni yangilaydi, --admin bo'lsa admin qiladi

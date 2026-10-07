@@ -24,3 +24,11 @@ if BASE_URL.startswith("https") and (SECRET_KEY == "dev-secret-change-me" or TG_
 
 # Bitta mijoz uchun kuniga ko'pi bilan shuncha qo'ng'iroq qayta ishlanadi (suiiste'mol va API limitidan himoya)
 MAX_CALLS_PER_DAY = int(os.environ.get("MAX_CALLS_PER_DAY", "5000"))
+
+# Kartaga o'tkazma orqali to'lov
+PAYMENT_CARD = os.environ.get("PAYMENT_CARD", "").replace(" ", "")          # karta raqami
+PAYMENT_CARD_HOLDER = os.environ.get("PAYMENT_CARD_HOLDER", "")             # karta egasi
+ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID", "").strip()                 # to'lov eslatmalari keladigan shaxsiy chat ID (botga /id yozing)
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "uploads")                        # cheklar saqlanadigan papka (ishchi papkaga nisbatan)
+MAX_RECEIPT_MB = int(os.environ.get("MAX_RECEIPT_MB", "8"))
+MAX_PENDING_PAYMENTS = 3                                                    # bitta mijozning kutilayotgan to'lovlari

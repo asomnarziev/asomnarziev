@@ -4,12 +4,12 @@ from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import config, hooks, web
-from .db import Base, engine
+from .db import init_db
 
 
 @asynccontextmanager
 async def lifespan(app):
-    Base.metadata.create_all(engine)  # prod'da Alembic tavsiya etiladi
+    init_db()
     yield
 
 

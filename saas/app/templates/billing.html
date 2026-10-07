@@ -1,13 +1,36 @@
 {% extends "base.html" %}{% from "icons.html" import i %}{% set active="billing" %}{% block body %}
-<div class="head"><h1>Tarif</h1><p>Obunangiz va mavjud tariflar</p></div>
-<div class="row" style="margin-bottom:14px"><span class="muted">Amal qiladi:</span><b>{{ acc.valid_until.strftime("%d.%m.%Y") }}</b>
+<div class="head"><h1>Tarif</h1><p>Obunangiz va to'lov</p></div>
+<div class="card row" style="gap:14px"><span class="muted">Amal qiladi:</span><b style="font:600 1.1rem var(--mono)">{{ acc.valid_until.strftime("%d.%m.%Y") }}</b>
 {% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</div>
-<div class="plans">
-{% for k,p in plans.items() %}<div class="card plan {{ 'pop' if k=='pro' }}">{% if k=='pro' %}<span class="tag">Mashhur</span>{% endif %}
-<h3 style="margin:0">{{ p.name }}</h3>
-<div class="price">{{ "{:,}".format(p.price).replace(",", " ") }} <small>so'm / {{ p.days }} kun</small></div>
-<ul><li>{{ i("check") }}{{ p.max_chats }} tagacha chat</li><li>{{ i("check") }}O'zbekcha va ruscha shablonlar</li><li>{{ i("check") }}Cheksiz qo'ng'iroq yozuvlari</li></ul>
-<form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="{{ k }}"><button class="{{ '' if k=='pro' else 'ghost' }}" style="width:100%">To'lov so'rovi yuborish</button></form></div>{% endfor %}
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+{% if ok %}<p class="ok"><b>Chek qabul qilindi.</b> Administrator tekshirgach obuna faollashadi, sizga Telegramda xabar keladi.</p>{% endif %}
+
+<div class="card"><div class="ch"><span class="ico">{{ i("card") }}</span>To'lov qilish</div>
+<p class="sub">1) Pastdagi kartaga summani o'tkazing. 2) Chek (skrinshot yoki PDF) ni yuklang. 3) Administrator tasdiqlaydi.</p>
+{% if config.PAYMENT_CARD %}
+<div class="code"><span class="m">KARTA</span><code id="card">{{ config.PAYMENT_CARD }}</code><button type="button" onclick="copyText('card')">{{ i("copy",14) }}Nusxalash</button></div>
+{% if config.PAYMENT_CARD_HOLDER %}<p class="muted small" style="margin:6px 0 0">Karta egasi: <b>{{ config.PAYMENT_CARD_HOLDER }}</b></p>{% endif %}
+{% else %}<p class="err">Karta ma'lumotlari hali sozlanmagan. Administrator bilan bog'laning.</p>{% endif %}
+<form method="post" action="/billing/checkout" enctype="multipart/form-data" style="margin-top:16px">
+<div class="plans" style="margin-bottom:12px">
+{% for k,p in plans.items() %}<label class="card plan" style="cursor:pointer;margin:0;display:block">
+ <input type="radio" name="plan" value="{{ k }}" {{ "checked" if loop.first }} style="float:right">
+ <h3 style="margin:0">{{ p.name }}</h3>
+ <div class="price">{{ "{:,}".format(p.price).replace(",", " ") }} <small>so'm / oy</small></div>
+ <ul><li>{{ i("check") }}{{ p.max_chats }} tagacha chat</li><li>{{ i("check") }}O'zbekcha va ruscha shablonlar</li></ul></label>{% endfor %}
 </div>
-<p class="muted small">To'lov so'rovi yuborilgach administrator to'lovni tasdiqlaydi va obuna faollashadi.</p>
+<div class="row" style="margin-bottom:12px"><label class="l" style="margin:0">Muddat</label>
+<select name="months">{% for m in months %}<option value="{{ m }}">{{ m }} oy</option>{% endfor %}</select>
+<span class="muted small">summa = oylik narx × oy</span></div>
+<div class="row" style="margin-bottom:12px"><label class="l" style="margin:0">Chek</label>
+<input type="file" name="receipt" accept="image/jpeg,image/png,image/webp,application/pdf" required>
+<span class="muted small">JPG, PNG, WEBP yoki PDF, {{ max_mb }} MB gacha</span></div>
+<button>{{ i("send",14) }}Chekni yuborish</button></form></div>
+
+<div class="card"><div class="ch"><span class="ico">{{ i("clock") }}</span>To'lovlar tarixi</div><div class="scroll" style="margin-top:10px"><table class="tbl">
+<thead><tr><th>Sana (UTC)</th><th>Tarif</th><th>Summa</th><th>Holat</th></tr></thead><tbody>
+{% for p in history %}<tr><td>{{ p.created_at.strftime("%d.%m.%Y %H:%M") }}</td><td><span class="badge">{{ plans[p.plan].name }}</span> × {{ p.months }} oy</td>
+<td>{{ "{:,}".format(p.amount).replace(",", " ") if p.amount else "—" }}</td>
+<td>{% if p.status=="paid" %}<span class="badge ok">tasdiqlandi</span>{% elif p.status=="rejected" %}<span class="badge err">rad etildi</span>{% if p.note %} <span class="muted small">{{ p.note }}</span>{% endif %}{% else %}<span class="badge warn">tekshirilmoqda</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="empty">Hali to'lov yo'q</td></tr>{% endfor %}</tbody></table></div></div>
 {% endblock %}

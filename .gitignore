@@ -4,3 +4,4 @@ __pycache__/
 saas.db
 test.db
 .pytest_cache/
+uploads/
