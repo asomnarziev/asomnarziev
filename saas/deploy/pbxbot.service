@@ -1,0 +1,14 @@
+[Unit]
+Description=PBX to Telegram SaaS
+After=network.target postgresql.service
+
+[Service]
+User=pbxbot
+WorkingDirectory=/opt/pbxbot/saas
+EnvironmentFile=/opt/pbxbot/saas/.env
+ExecStart=/opt/pbxbot/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
