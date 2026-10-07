@@ -15,3 +15,6 @@ PLANS = {
     "pro": {"name": "Pro", "price": 249_000, "days": 30, "max_chats": 20},
 }
 TRIAL_MAX_CHATS = 3
+
+if BASE_URL.startswith("https") and (SECRET_KEY == "dev-secret-change-me" or TG_WEBHOOK_SECRET == "tg-secret"):
+    raise RuntimeError("Productionda SECRET_KEY va TG_WEBHOOK_SECRET o'rnatilishi shart")
