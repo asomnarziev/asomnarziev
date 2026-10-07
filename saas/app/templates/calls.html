@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% from "icons.html" import i %}{% set active="calls" %}{% block body %}
+<div class="head"><h1>Qo'ng'iroqlar</h1><p>{{ total }} ta natija · {{ start.strftime("%d.%m.%Y") }} — {{ end.strftime("%d.%m.%Y") }}</p></div>
+{% if ok == "sent" %}<p class="ok">Yozuv Telegramga yuborildi.</p>{% endif %}
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+
+<div class="card"><form method="get" action="/calls">
+<div class="filters">
+ <div><label class="l">Raqam</label><input name="q" value="{{ q }}" placeholder="998901234567" maxlength="40"></div>
+ <div><label class="l">Xodim (ichki)</label><input name="ext" value="{{ ext }}" placeholder="105" maxlength="10"></div>
+ <div><label class="l">Yo'nalish</label><select name="d"><option value="">Hammasi</option>
+  {% for k,l in (("inbound","Kiruvchi"),("outbound","Chiquvchi"),("local","Ichki")) %}<option value="{{ k }}" {{ "selected" if d==k }}>{{ l }}</option>{% endfor %}</select></div>
+ <div><label class="l">Holat</label><select name="st"><option value="">Hammasi</option>
+  <option value="answered" {{ "selected" if st=="answered" }}>Javob berilgan</option><option value="missed" {{ "selected" if st=="missed" }}>Javobsiz</option></select></div>
+ <div><label class="l">Dan</label><input type="date" name="frm" value="{{ start.isoformat() }}"></div>
+ <div><label class="l">Gacha</label><input type="date" name="to" value="{{ end.isoformat() }}"></div>
+ <div><button style="width:100%">Qidirish</button></div>
+</div></form></div>
+
+<div class="card calls"><div class="scroll"><table class="tbl stack">
+<thead><tr><th>Vaqt</th><th>Kimdan</th><th>Kimga</th><th class="hide-sm">Yo'nalish</th><th>Suhbat</th><th></th></tr></thead><tbody>
+{% for r in rows %}{% set e, x = parties(r) %}<tr>
+ <td data-l="Vaqt">{{ local(r.started_at).strftime("%d.%m %H:%M") }}</td>
+ <td data-l="Kimdan"><code>{{ r.caller or "—" }}</code></td><td data-l="Kimga"><code>{{ r.callee or "—" }}</code></td>
+ <td class="hide-sm">{% if r.direction=="inbound" %}<span class="badge">kiruvchi</span>{% elif r.direction=="outbound" %}<span class="badge ok">chiquvchi</span>{% else %}<span class="muted">{{ r.direction or "—" }}</span>{% endif %}</td>
+ <td data-l="Suhbat">{% if answered(r) %}{{ "%d:%02d"|format((r.talk if r.talk is not none else r.duration)//60, (r.talk if r.talk is not none else r.duration)%60) }}{% else %}<span class="badge warn">javobsiz</span>{% endif %}</td>
+ <td style="text-align:right;white-space:nowrap">{% if answered(r) %}
+  <button type="button" class="ghost sm" onclick="var b=document.getElementById('rec{{ r.id }}');b.classList.toggle('open');var a=b.querySelector('audio');if(!a.src){a.src='/calls/{{ r.id }}/record'}">▶<span class="hide-sm"> Tinglash</span></button>
+  <a class="btn ghost sm" style="display:inline-flex;padding:3px 9px" href="/calls/{{ r.id }}/record?download=1" title="Yuklab olish">{{ i("download",14) }}</a>
+  <form method="post" action="/calls/{{ r.id }}/send" style="display:inline"><button class="ghost sm" title="Telegramga qayta yuborish">{{ i("send",14) }}</button></form>{% endif %}</td></tr>
+{% if answered(r) %}<tr><td colspan="6" class="rec" id="rec{{ r.id }}"><audio controls preload="none"></audio></td></tr>{% endif %}
+{% else %}<tr><td colspan="6" class="empty">{{ i("phone",26) }}Hech narsa topilmadi.<br><span class="small">Qo'ng'iroqlar webhook orqali kelganidan boshlab saqlanadi.</span></td></tr>{% endfor %}
+</tbody></table></div>
+{% if pages > 1 %}<div class="pager">
+ {% if page > 1 %}<a href="/calls?{{ base }}&page={{ page-1 }}">← Oldingi</a>{% endif %}<span class="muted">{{ page }} / {{ pages }}</span>
+ {% if page < pages %}<a href="/calls?{{ base }}&page={{ page+1 }}">Keyingi →</a>{% endif %}</div>{% endif %}
+</div>
+{% endblock %}

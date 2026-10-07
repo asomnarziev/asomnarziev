@@ -96,3 +96,9 @@ Pro tarifdagi mijozlarga har kuni ertalab (standart 09:00, Toshkent vaqti; kabin
 - Server o'chiq turib soat o'tib ketsa, yoqilgandan keyin o'sha kunning hisoboti yuboriladi; bir kunga ikki marta yuborilmaydi.
 - Telegram xatosida 3 marta urinadi, keyin o'sha kunni o'tkazib yuboradi.
 - O'chirish: `.env` ga `SCHEDULER=0`. Vaqt mintaqasi: `TZ_OFFSET_HOURS` (standart 5).
+
+## Pro: javobsiz qo'ng'iroq ogohlantirishi va qidiruv
+Ikkalasi ham faqat **Pro** tarifda (`features`: `missed_alerts`, `search`).
+- **Javobsiz qo'ng'iroq:** kiruvchi qo'ng'iroqqa javob berilmasa, ulangan chatlarga darrov "📵 Javobsiz qo'ng'iroq" xabari (kim, kimga, qachon, necha soniya jiringlagan) o'z tilida keladi. Yozuv bo'lmagani uchun OnlinePBX API'dan yozuv so'ralmaydi. Kabinetdagi "Hisobot va ogohlantirishlar" kartasida o'chirib qo'yish mumkin. Chiquvchi javobsiz qo'ng'iroqlar bunga kirmaydi. **Webhook'da "Завершили" hodisasi yoqilgan bo'lishi kerak** (javobsiz qo'ng'iroq ham shu hodisa bilan keladi; kelmasa "Пропущенный" ni ham yoqing).
+- **Qidiruv (`/calls`):** raqam (qisman), xodim, yo'nalish, holat va sana bo'yicha; sahifasiga 50 tadan. Yozuvni saytda tinglash/yuklab olish va Telegramga qayta yuborish mumkin. Yozuv har safar OnlinePBX'dan olinadi, shuning uchun soatiga `MAX_RECORD_FETCH_PER_HOUR` (standart 60) tadan ko'p emas.
+- Qidiruv faqat yangilangandan keyin saqlangan qo'ng'iroqlarni topadi.

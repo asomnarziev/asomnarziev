@@ -1,16 +1,20 @@
-from datetime import timedelta
+import time as _time
+from collections import defaultdict, deque
+from datetime import timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import config, receipts, reports, scheduler, service, telegram
 from .db import get_db
 from .messages import LANGS, TEMPLATES
-from .models import Account, Chat, Payment, User, now, token
-from .security import encrypt, hash_password, verify_password
+from .models import Account, CallLog, Chat, Payment, User, now, token
+from .pbx import PbxClient, PbxError
+from .security import decrypt, encrypt, hash_password, verify_password
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -220,6 +224,123 @@ def test_digest(user: User = Depends(require_user), db: Session = Depends(get_db
         return go("/cabinet?error=" + quote_plus("Avval Telegram chat ulang"))
     sent = scheduler.send_digest(db, user.account, reports.today_local(), test=True)
     return go("/cabinet?ok=digest_test" if sent else "/cabinet?error=" + quote_plus("Hisobotni yuborib bo'lmadi: chatlarni tekshiring"))
+
+
+@router.post("/cabinet/missed-alerts")
+def save_missed_alerts(on: str | None = Form(None), user: User = Depends(require_user), db: Session = Depends(get_db)):
+    if not (user.is_admin or user.account.can("missed_alerts")):
+        raise HTTPException(403, "Javobsiz qo'ng'iroq ogohlantirishi Pro tarifda")
+    user.account.missed_on = on is not None
+    db.commit()
+    return go("/cabinet?ok=missed")
+
+
+def _can_search(user: User) -> bool:
+    return user.is_admin or user.account.can("search")
+
+
+_fetches: dict[int, deque] = defaultdict(deque)
+
+
+def _fetch_record(acc: Account, uuid: str) -> bytes:
+    """Yozuvni OnlinePBX'dan qayta oladi. Soatiga MAX_RECORD_FETCH_PER_HOUR dan ko'p emas (API limitidan himoya)."""
+    q, t = _fetches[acc.id], _time.monotonic()
+    while q and t - q[0] > 3600:
+        q.popleft()
+    if len(q) >= config.MAX_RECORD_FETCH_PER_HOUR:
+        raise HTTPException(429, "Yozuvni qayta olish limiti oshdi (soatiga %d ta). Keyinroq urinib ko'ring." % config.MAX_RECORD_FETCH_PER_HOUR)
+    q.append(t)
+    try:
+        audio = PbxClient(acc.pbx_domain, decrypt(acc.pbx_key_enc)).record(uuid)
+    except PbxError as e:
+        raise HTTPException(502, str(e))
+    if not audio:
+        raise HTTPException(404, "Yozuv topilmadi")
+    return audio
+
+
+def _own_call(db: Session, user: User, cid: int) -> CallLog:
+    row = db.get(CallLog, cid)
+    if not row or row.account_id != user.account.id:
+        raise HTTPException(404)
+    return row
+
+
+def _row_to_call(row: CallLog) -> dict:
+    return {"uuid": row.uuid, "accountcode": row.direction, "caller_id_number": row.caller, "destination_number": row.callee,
+            "duration": row.duration, "start_stamp": int(row.started_at.replace(tzinfo=timezone.utc).timestamp()) if row.started_at else None}
+
+
+PAGE = 50
+
+
+@router.get("/calls")
+def calls_page(request: Request, q: str = "", ext: str = "", d: str = "", st: str = "", frm: str | None = None,
+               to: str | None = None, page: int = 1, ok: str | None = None, error: str | None = None,
+               user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Pro: qo'ng'iroqlarni raqam, xodim, yo'nalish, holat va sana bo'yicha qidirish."""
+    if not _can_search(user):
+        return render(request, "calls_locked.html", user=user, acc=user.account, plans=config.PLANS)
+    start, end, _ = reports.parse_period("30d", frm, to)
+    lo, hi = reports.utc_bounds(start, end)
+    qs = db.query(CallLog).filter(CallLog.account_id == user.account.id, CallLog.started_at >= lo, CallLog.started_at < hi)
+    q, ext = q.strip()[:40], ext.strip()[:10]
+    if q:
+        qs = qs.filter(CallLog.caller.contains(q, autoescape=True) | CallLog.callee.contains(q, autoescape=True))
+    if ext:
+        qs = qs.filter((CallLog.caller == ext) | (CallLog.callee == ext))
+    if d in ("inbound", "outbound", "local"):
+        qs = qs.filter(CallLog.direction == d)
+    miss = (func.coalesce(CallLog.talk, CallLog.duration) <= 0) | (func.coalesce(CallLog.talk, CallLog.duration).is_(None))
+    if st == "missed":
+        qs = qs.filter(miss)
+    elif st == "answered":
+        qs = qs.filter(~miss)
+    total = qs.count()
+    pages = max(1, -(-total // PAGE))
+    page = min(max(page, 1), pages)
+    rows = qs.order_by(CallLog.started_at.desc()).offset((page - 1) * PAGE).limit(PAGE).all()
+    from urllib.parse import urlencode
+    base = urlencode({"q": q, "ext": ext, "d": d, "st": st, "frm": start.isoformat(), "to": end.isoformat()})
+    return render(request, "calls.html", user=user, acc=user.account, rows=rows, total=total, page=page, pages=pages,
+                  q=q, ext=ext, d=d, st=st, start=start, end=end, base=base, local=reports.local, answered=reports.answered,
+                  parties=reports.parties, ok=ok, error=error)
+
+
+@router.get("/calls/{cid}/record")
+def call_record(cid: int, download: int = 0, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    if not _can_search(user):
+        raise HTTPException(403, "Yozuvlarni qayta olish Pro tarifda")
+    row = _own_call(db, user, cid)
+    audio = _fetch_record(user.account, row.uuid)
+    name = service.audio_name(_row_to_call(row))
+    return Response(audio, media_type="audio/mpeg", headers={
+        "Content-Disposition": f'{"attachment" if download else "inline"}; filename="{name}"', "Cache-Control": "private, no-store"})
+
+
+@router.post("/calls/{cid}/send")
+def call_resend(cid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Yozuvni qayta Telegramga yuborish (akkauntning barcha chatlariga, har biri o'z tilida)."""
+    from urllib.parse import quote_plus
+    if not _can_search(user):
+        raise HTTPException(403)
+    acc = user.account
+    row = _own_call(db, user, cid)
+    if not acc.chats:
+        return go("/calls?error=" + quote_plus("Avval Telegram chat ulang"))
+    try:
+        audio = _fetch_record(acc, row.uuid)
+    except HTTPException as e:
+        return go("/calls?error=" + quote_plus(str(e.detail)))
+    call, sent = _row_to_call(row), 0
+    for chat in acc.chats:
+        lang = chat.lang if chat.lang in LANGS else "uz"
+        try:
+            telegram.send_audio(chat.chat_id, service.render_call(lang, call), audio, service.audio_name(call))
+            sent += 1
+        except Exception:
+            pass
+    return go("/calls?ok=sent" if sent else "/calls?error=" + quote_plus("Telegramga yuborib bo'lmadi: chatlarni tekshiring"))
 
 
 def _reports_allowed(user: User) -> bool:

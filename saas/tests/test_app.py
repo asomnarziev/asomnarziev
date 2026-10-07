@@ -728,7 +728,7 @@ def test_plan_features_and_billing_perks(client):
     from app import config
     register(client, "c@x.uz")
     assert "Hisobotlar" in client.get("/billing").text
-    assert config.PLANS["pro"]["features"] == ("reports",) and config.PLANS["start"]["features"] == ()
+    assert config.PLANS["pro"]["features"] == ("reports", "missed_alerts", "search") and config.PLANS["start"]["features"] == ()
 
 
 # ---------- Kunlik hisobot (Pro) ----------
@@ -850,3 +850,182 @@ def test_migration_adds_digest_columns(tmp_path, monkeypatch):
     assert {"digest_on", "digest_hour", "digest_last"} <= {c["name"] for c in inspect(eng).get_columns("accounts")}
     with eng.connect() as c:
         assert c.execute(text("SELECT digest_on, digest_hour, digest_last FROM accounts")).one() == (1, 9, "")
+
+
+# ---------- Pro: javobsiz qo'ng'iroq ogohlantirishi ----------
+MISSED = {"uuid": "m1", "caller_id_number": "998901112233", "destination_number": "105", "accountcode": "inbound",
+          "duration": "14", "user_talk_time": "0", "start_stamp": 1791358224}
+
+
+def run_call(client, monkeypatch, info, pro=True, missed_on=True):
+    """Mijoz (account 2) uchun qo'ng'iroqni qayta ishlaydi; (yuborilgan xabarlar, yozuv so'raldimi) qaytaradi."""
+    from app.models import CallLog
+    admin = client; register(admin, "admin@x.uz")
+    cust = TestClient(app); register(cust, "c@x.uz")
+    cust.post("/cabinet/pbx", data={"domain": "d.onpbx.ru", "key": "k"})
+    cust.post("/cabinet/chat", data={"chat_id": "1", "lang": "uz"})
+    cust.post("/cabinet/chat", data={"chat_id": "2", "lang": "ru"})
+    if pro:
+        make_pro(admin, 2)
+        if not missed_on:
+            cust.post("/cabinet/missed-alerts", data={})
+    sent, rec = [], []
+
+    class FakePbx:
+        def __init__(self, *a): pass
+        def call_info(self, u): return info
+        def record(self, u): rec.append(1); return None
+    monkeypatch.setattr(service, "PbxClient", FakePbx)
+    monkeypatch.setattr(service, "RECORD_RETRY_DELAYS", ())
+    monkeypatch.setattr(telegram, "send_message", lambda chat, text, markup=None: sent.append((chat, text)))
+    with SessionLocal() as db:
+        service.process_call(db, 2, "m1")
+        status = db.query(CallLog).filter_by(account_id=2).one().status
+    return sent, rec, status
+
+
+def test_missed_alert_pro_inbound_sent_in_chat_languages_without_record_fetch(client, monkeypatch):
+    sent, rec, status = run_call(client, monkeypatch, MISSED)
+    assert rec == [] and status == "sent"  # yozuv yo'q: OnlinePBX API'ga qo'shimcha so'rov yuborilmagan
+    assert [c for c, _ in sent] == ["1", "2"]
+    assert "Javobsiz qo'ng'iroq" in sent[0][1] and "<code>998901112233</code>" in sent[0][1] and "12:30:24" in sent[0][1]
+    assert "Пропущенный звонок" in sent[1][1] and "Звонил: 00:14" in sent[1][1]
+
+
+@pytest.mark.parametrize("name,kwargs,info", [
+    ("pro emas", {"pro": False}, MISSED),
+    ("ogohlantirish o'chirilgan", {"missed_on": False}, MISSED),
+    ("chiquvchi", {}, {**MISSED, "accountcode": "outbound"}),
+    ("javob berilgan", {}, {**MISSED, "user_talk_time": "40", "duration": "50"}),
+    ("ma'lumot noma'lum", {}, {"uuid": "m1"}),
+])
+def test_missed_alert_not_triggered(client, monkeypatch, name, kwargs, info):
+    sent, rec, _ = run_call(client, monkeypatch, info, **kwargs)
+    assert rec == [1], name  # oddiy oqim: yozuv so'raldi
+    assert all("Javobsiz qo'ng'iroq" not in t and "Пропущенный" not in t for _, t in sent), name
+
+
+def test_missed_alert_toggle_requires_pro(client):
+    admin = client; register(admin, "admin@x.uz")
+    cust = TestClient(app); register(cust, "c@x.uz")
+    assert cust.post("/cabinet/missed-alerts", data={"on": "1"}).status_code == 403
+    make_pro(admin, 2)
+    cust.post("/cabinet/missed-alerts", data={})
+    with SessionLocal() as db:
+        assert db.get(Account, 2).missed_on is False
+    cust.post("/cabinet/missed-alerts", data={"on": "1"})
+    with SessionLocal() as db:
+        assert db.get(Account, 2).missed_on is True
+    assert "Javobsiz qo&#39;ng&#39;iroq ogohlantirishi" in cust.get("/cabinet").text.replace("'", "&#39;")
+
+
+# ---------- Pro: qo'ng'iroqlarni qidirish va yozuvni qayta olish ----------
+@pytest.fixture()
+def calls_env(client, monkeypatch):
+    from app import web
+    web._fetches.clear()
+    admin = client; register(admin, "admin@x.uz")
+    cust = TestClient(app); register(cust, "c@x.uz")
+    cust.post("/cabinet/pbx", data={"domain": "d.onpbx.ru", "key": "k"})
+    seed_calls(2)  # a(id1) kiruvchi javob, b(id2) chiquvchi javob, c(id3) chiquvchi javobsiz, d(id4) kiruvchi javobsiz
+    make_pro(admin, 2)
+    return admin, cust
+
+
+def n_rows(resp):
+    return resp.text.count("<code>") // 2
+
+
+def test_calls_search_locked_for_non_pro(client):
+    register(client, "admin@x.uz")
+    cust = TestClient(app); register(cust, "c@x.uz")
+    seed_calls(2)
+    page = cust.get("/calls").text
+    assert "Qidiruv Pro tarifda ochiladi" in page and "998901112233" not in page
+    assert cust.get("/calls/1/record").status_code == 403 and cust.post("/calls/1/send").status_code == 403
+
+
+def test_calls_search_filters(calls_env):
+    _, cust = calls_env
+    assert n_rows(cust.get("/calls")) == 4
+    assert n_rows(cust.get("/calls?q=998901112233")) == 2
+    assert n_rows(cust.get("/calls?q=5556677")) == 2  # qisman raqam
+    assert n_rows(cust.get("/calls?ext=107")) == 1
+    assert n_rows(cust.get("/calls?d=outbound")) == 2
+    assert n_rows(cust.get("/calls?st=missed")) == 2 and n_rows(cust.get("/calls?st=answered")) == 2
+    assert n_rows(cust.get("/calls?st=missed&d=inbound")) == 1
+    assert n_rows(cust.get("/calls?q=%25")) == 0 and n_rows(cust.get("/calls?q=_")) == 0  # LIKE belgilari oddiy matn
+    assert "Hech narsa topilmadi" in cust.get("/calls?frm=2020-01-01&to=2020-01-02").text or n_rows(cust.get("/calls?frm=2020-01-01&to=2020-01-02")) == 0
+
+
+def test_calls_pagination_and_isolation(calls_env):
+    from datetime import datetime, timedelta, timezone
+    from app.models import CallLog
+    admin, cust = calls_env
+    with SessionLocal() as db:
+        t0 = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
+        for k in range(120):
+            db.add(CallLog(account_id=2, uuid=f"p{k}", status="sent", direction="inbound", caller=f"9989000{k:05d}",
+                           callee="105", started_at=t0 - timedelta(seconds=k), duration=5, talk=5))
+        db.commit()
+    assert n_rows(cust.get("/calls")) == 50 and "1 / 3" in cust.get("/calls").text
+    assert n_rows(cust.get("/calls?page=3")) == 24 and n_rows(cust.get("/calls?page=99")) == 24  # 124 ta; oxirgi sahifaga qisiladi
+    other = TestClient(app); register(other, "z@x.uz"); make_pro(admin, 3)
+    assert n_rows(other.get("/calls")) == 0 and "998901112233" not in other.get("/calls").text
+    assert other.get("/calls/1/record").status_code == 404 and other.post("/calls/1/send").status_code == 404
+
+
+def test_call_record_proxy_and_hourly_cap(calls_env, monkeypatch):
+    from app import web
+    from app.pbx import PbxError
+    _, cust = calls_env
+    mode = {"v": b"mp3data"}
+
+    class FakePbx:
+        def __init__(self, *a): pass
+        def record(self, u):
+            if isinstance(mode["v"], Exception): raise mode["v"]
+            return mode["v"]
+    monkeypatch.setattr(web, "PbxClient", FakePbx)
+    r = cust.get("/calls/1/record")
+    assert r.status_code == 200 and r.content == b"mp3data" and r.headers["content-type"] == "audio/mpeg"
+    assert "inline" in r.headers["content-disposition"] and "998901112233_105_" in r.headers["content-disposition"]
+    assert "attachment" in cust.get("/calls/1/record?download=1").headers["content-disposition"]
+    mode["v"] = None
+    assert cust.get("/calls/1/record").status_code == 404
+    mode["v"] = PbxError("OnlinePBX'ga ulanib bo'lmadi")
+    r = cust.get("/calls/1/record")
+    assert r.status_code == 502 and "ulanib" in r.text
+    monkeypatch.setattr(web.config, "MAX_RECORD_FETCH_PER_HOUR", 4)  # 4 ta so'rov allaqachon bo'lgan
+    assert cust.get("/calls/1/record").status_code == 429
+
+
+def test_call_resend_to_telegram(calls_env, monkeypatch):
+    from app import web
+    _, cust = calls_env
+    cust.post("/cabinet/chat", data={"chat_id": "1", "lang": "uz"})
+    cust.post("/cabinet/chat", data={"chat_id": "2", "lang": "ru"})
+    sent = []
+    monkeypatch.setattr(telegram, "send_audio", lambda chat, cap, audio, name: sent.append((chat, cap, audio, name)))
+    monkeypatch.setattr(web, "PbxClient", type("F", (), {"__init__": lambda s, *a: None, "record": lambda s, u: b"mp3"}))
+    r = cust.post("/calls/1/send", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/calls?ok=sent"
+    assert [c for c, *_ in sent] == ["1", "2"] and sent[0][2] == b"mp3" and sent[0][3].endswith(".mp3")
+    assert "Qo'ng'iroq yozuvi" in sent[0][1] and "Запись звонка" in sent[1][1]
+    assert "Yozuv Telegramga yuborildi" in cust.get("/calls?ok=sent").text
+    nochat = TestClient(app); register(nochat, "n@x.uz")
+    assert nochat.post("/calls/1/send").status_code == 403  # Pro emas
+
+
+def test_migration_adds_missed_on(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, inspect, text
+    from app import db as dbm
+    eng = create_engine(f"sqlite:///{tmp_path/'old4.db'}")
+    with eng.begin() as c:
+        c.execute(text("CREATE TABLE accounts (id INTEGER PRIMARY KEY, user_id INTEGER, plan VARCHAR(20), suspended BOOLEAN)"))
+        c.execute(text("INSERT INTO accounts (user_id, plan, suspended) VALUES (1,'pro',0)"))
+    monkeypatch.setattr(dbm, "engine", eng)
+    dbm.init_db()
+    assert "missed_on" in {c["name"] for c in inspect(eng).get_columns("accounts")}
+    with eng.connect() as c:
+        assert c.execute(text("SELECT missed_on FROM accounts")).scalar() == 1

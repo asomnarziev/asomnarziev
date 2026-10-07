@@ -104,6 +104,18 @@ code{font:.88em var(--mono);background:var(--line2);padding:1px 6px;border-radiu
 .bar{display:inline-block;height:6px;border-radius:3px;background:var(--ok);vertical-align:middle;min-width:2px}
 .lock{text-align:center;padding:34px 20px}.lock .ic{color:var(--ok);margin-bottom:10px}
 @media(max-width:560px){.two{grid-template-columns:1fr}}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;align-items:end;margin-bottom:6px}
+.filters label.l{margin:0 0 3px}.filters input,.filters select{width:100%}
+.btn.ghost{background:var(--card);color:var(--text);border-color:var(--line)}.btn.ghost:hover{background:var(--line2);color:var(--text)}
+.calls .rec{display:none;padding:8px 10px;background:var(--card2)}.calls .rec.open{display:table-cell}.calls .rec audio{width:100%;height:36px}
+@media(max-width:560px){
+ .tbl.stack,.tbl.stack tbody,.tbl.stack tr,.tbl.stack td{display:block;width:auto}.tbl.stack thead{display:none}
+ .tbl.stack tr{padding:10px 2px;border-bottom:1px solid var(--line2)}.tbl.stack td{border:0;padding:2px 4px}
+ .tbl.stack td[data-l]::before{content:attr(data-l);display:inline-block;width:56px;color:var(--muted);font:11px var(--mono);text-transform:uppercase}
+ .tbl.stack td:last-child{text-align:left!important;padding-top:6px}.tbl.stack .rec.open{display:block;padding:6px 4px}
+ .tbl.stack tr:hover{background:transparent}.tbl.stack td.empty{text-align:center}
+}
+.pager{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:12px;font:12.5px var(--mono)}
 .empty{text-align:center;color:var(--muted);padding:22px 10px!important;font:13px var(--mono)}.empty .ic{display:block;margin:0 auto 6px;opacity:.5}
 .term{background:#010409;border:1px solid var(--line);border-radius:6px;font:12.5px/1.7 var(--mono);color:#c9d1d9;padding:10px 14px;overflow-x:auto;max-height:340px;overflow-y:auto}
 .term .ln{white-space:nowrap}.term .t{color:#6e7681}.term .s{font-weight:700}.term .s.ok{color:#3fb950;background:none;padding:0;border:0;display:inline}.term .s.err{color:#f85149;background:none;padding:0;border:0;display:inline}.term .s.warn{color:#d29922;background:none;padding:0;border:0;display:inline}
@@ -143,6 +155,7 @@ code{font:.88em var(--mono);background:var(--line2);padding:1px 6px;border-radiu
  <div class="grp">Asosiy</div>
  <a class="nav {{ 'on' if active=='cabinet' }}" href="/cabinet">{{ i("home") }}Kabinet</a>
  <a class="nav {{ 'on' if active=='reports' }}" href="/reports">{{ i("chart") }}Hisobotlar{% if not (user.is_admin or user.account.can("reports")) %}<span class="pro">PRO</span>{% endif %}</a>
+ <a class="nav {{ 'on' if active=='calls' }}" href="/calls">{{ i("phone") }}Qo'ng'iroqlar{% if not (user.is_admin or user.account.can("search")) %}<span class="pro">PRO</span>{% endif %}</a>
  <a class="nav {{ 'on' if active=='billing' }}" href="/billing">{{ i("card") }}Tarif</a>
  {% if user.is_admin %}<div class="grp">Boshqaruv</div>
  <a class="nav {{ 'on' if active=='admin' }}" href="/admin">{{ i("shield") }}Admin</a>{% endif %}
@@ -152,7 +165,7 @@ code{font:.88em var(--mono);background:var(--line2);padding:1px 6px;border-radiu
 </aside>
 <div class="main">
  <nav class="mtop"><span class="logo"><i>&gt;_</i></span>
-  <a class="nav {{ 'on' if active=='cabinet' }}" href="/cabinet">Kabinet</a><a class="nav {{ 'on' if active=='reports' }}" href="/reports">Hisobot</a><a class="nav {{ 'on' if active=='billing' }}" href="/billing">Tarif</a>
+  <a class="nav {{ 'on' if active=='cabinet' }}" href="/cabinet">Kabinet</a><a class="nav {{ 'on' if active=='reports' }}" href="/reports">Hisobot</a><a class="nav {{ 'on' if active=='calls' }}" href="/calls">Qo'ng'iroq</a><a class="nav {{ 'on' if active=='billing' }}" href="/billing">Tarif</a>
   {% if user.is_admin %}<a class="nav {{ 'on' if active=='admin' }}" href="/admin">Admin</a>{% endif %}
   <form method="post" action="/logout"><button title="Chiqish">{{ i("out") }}</button></form></nav>
  <div class="wrap">{% block body %}{% endblock %}</div>

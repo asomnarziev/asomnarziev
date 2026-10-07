@@ -43,6 +43,7 @@ class Account(Base):
     digest_on: Mapped[bool] = mapped_column(Boolean, default=True)
     digest_hour: Mapped[int] = mapped_column(Integer, default=9)
     digest_last: Mapped[str] = mapped_column(String(10), default="")
+    missed_on: Mapped[bool] = mapped_column(Boolean, default=True)       # javobsiz qo'ng'iroq ogohlantirishi (Pro)
     user: Mapped[User] = relationship(back_populates="account")
     chats: Mapped[list["Chat"]] = relationship(back_populates="account", cascade="all, delete-orphan")
     logs: Mapped[list["CallLog"]] = relationship(back_populates="account", cascade="all, delete-orphan",

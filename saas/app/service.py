@@ -8,7 +8,7 @@ from html import escape as _escape
 from sqlalchemy.orm import Session
 
 from . import config, receipts, telegram
-from .messages import DEFAULT_LANG, LANGS, TEMPLATES, audio_name, render_call
+from .messages import DEFAULT_LANG, LANGS, TEMPLATES, audio_name, render_call, render_missed
 from .db import SessionLocal
 from .models import Account, CallLog, Chat, Payment, now
 from .pbx import PbxClient
@@ -52,6 +52,13 @@ def store_call_stats(row: CallLog, call: dict) -> None:
     row.talk = num(call.get("user_talk_time"))
 
 
+def is_missed_inbound(call: dict, row: CallLog) -> bool:
+    """Kiruvchi va javob berilmagan qo'ng'iroq. OnlinePBX ma'lumoti bo'sh kelsa (noma'lum) ogohlantirilmaydi."""
+    if not (call.get("caller_id_number") and call.get("start_stamp")) or row.direction != "inbound":
+        return False
+    return not ((row.talk if row.talk is not None else row.duration) or 0) > 0
+
+
 def process_call(db: Session, account_id: int, uuid: str) -> None:
     """OnlinePBX webhook'dan keyin: ma'lumot + yozuvni olib, akkauntning barcha chatlariga yuboradi."""
     acc = db.get(Account, account_id)
@@ -77,6 +84,14 @@ def process_call(db: Session, account_id: int, uuid: str) -> None:
         call = pbx.call_info(uuid) or {"uuid": uuid}
         store_call_stats(log_row, call)
         db.commit()  # hisobot ma'lumoti Telegram yuborilmasa ham saqlanadi
+        if acc.missed_on and acc.can("missed_alerts") and is_missed_inbound(call, log_row):
+            # Pro: javobsiz kiruvchi qo'ng'iroq -> darrov ogohlantirish; yozuv yo'q, shuning uchun API'dan so'ramaymiz
+            for chat in acc.chats:
+                lang = chat.lang if chat.lang in LANGS else DEFAULT_LANG
+                telegram.send_message(chat.chat_id, render_missed(lang, call))
+            log_row.status = "sent"
+            db.commit()
+            return
         audio = fetch_record(pbx, uuid)
         for chat in acc.chats:
             lang = chat.lang if chat.lang in LANGS else DEFAULT_LANG

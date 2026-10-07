@@ -21,6 +21,13 @@ TEMPLATES = {
         "linked": "✅ Chat ulandi. Tilni kabinetdan o'zgartirishingiz mumkin (hozir: O'zbekcha).",
         "bad_code": "⛔ Kod noto'g'ri. Kabinetdagi havoladan foydalaning.",
         "limit": "⚠️ Chatlar limiti tugagan. Tarifni yangilang.",
+        "missed": (
+            "📵 <b>Javobsiz qo'ng'iroq</b>\n"
+            "Kimdan: <code>{caller}</code>\n"
+            "Kimga: <code>{callee}</code>\n"
+            "Sana: {date}\n"
+            "Jiringlagan: {duration}"
+        ),
         "pay_ok": "✅ To'lovingiz tasdiqlandi. Obuna {until} gacha faol.",
         "pay_no": "❌ To'lov tasdiqlanmadi. Sababni kabinetdagi «Tarif» sahifasida ko'ring.",
     },
@@ -41,6 +48,13 @@ TEMPLATES = {
         "linked": "✅ Chat ulandi / Чат подключён. Язык меняется в кабинете.",
         "bad_code": "⛔ Неверный код. Используйте ссылку из кабинета.",
         "limit": "⚠️ Лимит чатов исчерпан. Обновите тариф.",
+        "missed": (
+            "📵 <b>Пропущенный звонок</b>\n"
+            "От: <code>{caller}</code>\n"
+            "Кому: <code>{callee}</code>\n"
+            "Дата: {date}\n"
+            "Звонил: {duration}"
+        ),
         "pay_ok": "✅ Ваш платёж подтверждён. Подписка активна до {until}.",
         "pay_no": "❌ Платёж не подтверждён. Причину смотрите в кабинете на странице «Тариф».",
     },
@@ -78,6 +92,17 @@ def render_call(lang: str, call: dict) -> str:
     dt = local_time(call.get("start_stamp"))
     return t["call"].format(
         direction=t["direction"].get(call.get("accountcode"), t["unknown"]),
+        caller=escape(str(call.get("caller_id_number") or t["unknown"])),
+        callee=escape(str(call.get("destination_number") or t["unknown"])),
+        date=dt.strftime("%d.%m.%Y %H:%M:%S") if dt else t["unknown"],
+        duration=fmt_duration(call.get("duration", 0)),
+    )
+
+
+def render_missed(lang: str, call: dict) -> str:
+    t = TEMPLATES.get(lang) or TEMPLATES[DEFAULT_LANG]
+    dt = local_time(call.get("start_stamp"))
+    return t["missed"].format(
         caller=escape(str(call.get("caller_id_number") or t["unknown"])),
         callee=escape(str(call.get("destination_number") or t["unknown"])),
         date=dt.strftime("%d.%m.%Y %H:%M:%S") if dt else t["unknown"],
