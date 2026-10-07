@@ -1,5 +1,6 @@
 """Biznes mantiq: qo'ng'iroqni yuborish, Telegram buyruqlari, to'lovni tasdiqlash."""
 import logging
+import time
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -11,6 +12,19 @@ from .pbx import PbxClient
 from .security import decrypt
 
 log = logging.getLogger(__name__)
+
+# Qo'ng'iroq tugagan zahoti yozuv fayli hali tayyor bo'lmasligi mumkin: shuncha soniya kutib qayta so'raymiz
+RECORD_RETRY_DELAYS = (5, 15, 30, 60)
+
+
+def fetch_record(pbx: PbxClient, uuid: str) -> bytes | None:
+    audio = pbx.record(uuid)
+    for delay in RECORD_RETRY_DELAYS:
+        if audio:
+            break
+        time.sleep(delay)
+        audio = pbx.record(uuid)
+    return audio
 
 
 def process_call(db: Session, account_id: int, uuid: str) -> None:
@@ -30,7 +44,7 @@ def process_call(db: Session, account_id: int, uuid: str) -> None:
     try:
         pbx = PbxClient(acc.pbx_domain, decrypt(acc.pbx_key_enc))
         call = pbx.call_info(uuid) or {"uuid": uuid}
-        audio = pbx.record(uuid)
+        audio = fetch_record(pbx, uuid)
         for chat in acc.chats:
             lang = chat.lang if chat.lang in LANGS else DEFAULT_LANG
             caption = render_call(lang, call)

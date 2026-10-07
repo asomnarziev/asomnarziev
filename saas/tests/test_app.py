@@ -157,3 +157,17 @@ def test_admin_creates_customer_and_registration_closed(client, monkeypatch):
     aid = 2
     client.post(f"/admin/account/{aid}/password", data={"password": "yangiparol1"})
     assert TestClient(app).post("/login", data={"email": "cust@x.uz", "password": "yangiparol1"}, follow_redirects=False).headers["location"] == "/cabinet"
+
+
+def test_record_retried_until_ready(monkeypatch):
+    calls = []
+
+    class Pbx:
+        def record(self, u):
+            calls.append(1)
+            return b"mp3" if len(calls) == 3 else None
+
+    sleeps = []
+    monkeypatch.setattr(service.time, "sleep", sleeps.append)
+    assert service.fetch_record(Pbx(), "u") == b"mp3"
+    assert len(calls) == 3 and sleeps == [5, 15]
