@@ -58,3 +58,13 @@ cd /opt/pbxbot/saas && set -a && . ./.env && set +a && /opt/pbxbot/venv/bin/pyth
 (shu buyruq mavjud foydalanuvchining parolini ham almashtiradi). Keyin mijozlarni `/admin` → "Mijoz qo'shish" orqali qo'shasiz: email va parol qo'yib, ma'lumotni mijozga berasiz.
 
 Yangilash: `cd /opt/pbxbot && git pull && venv/bin/pip install -r saas/requirements.txt && systemctl restart pbxbot`
+
+## OnlinePBX API limitlaridan himoya
+OnlinePBX'ning rasmiy limitlari bizga noma'lum, shuning uchun kod ehtiyotkor ishlaydi va hammasi `.env` orqali sozlanadi:
+- Auth kaliti keshlanadi (`PBX_KEY_TTL`): har qo'ng'iroqda qayta `auth` qilinmaydi, 401/403 da bir marta yangilanadi.
+- Tezlik: har mijozga `PBX_RPS_PER_TENANT` (2/s), umumiy `PBX_RPS_GLOBAL` (10/s) so'rov. Qo'ng'iroqlar ko'p kelsa, ular navbatda kutadi, yo'qolmaydi.
+- 429/5xx: `Retry-After` yoki eksponensial kutish, ko'pi bilan `PBX_MAX_RETRIES` urinish, keyin kabinetda `error`.
+- Noto'g'ri domen/kalit: `PBX_AUTH_COOLDOWN` soniya auth'ga urilmaydi (kalit o'zgartirilsa darrov tugaydi). Tarmoq xatosida tanaffus yo'q.
+- Bir mijoz uchun kuniga `MAX_CALLS_PER_DAY` dan ortiq qo'ng'iroq qayta ishlanmaydi (`skipped`).
+- Bir xil qo'ng'iroq (uuid) ikkinchi marta so'ralmaydi.
+OnlinePBX qo'llab-quvvatlashidan haqiqiy limitni so'rab, shu qiymatlarni moslang. Kesh jarayon xotirasida: ilovani **bitta** uvicorn worker bilan ishlating (hozirgi systemd sozlamasi shunday).

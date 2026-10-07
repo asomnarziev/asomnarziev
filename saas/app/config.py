@@ -21,3 +21,6 @@ TRIAL_MAX_CHATS = 3
 
 if BASE_URL.startswith("https") and (SECRET_KEY == "dev-secret-change-me" or TG_WEBHOOK_SECRET == "tg-secret"):
     raise RuntimeError("Productionda SECRET_KEY va TG_WEBHOOK_SECRET o'rnatilishi shart")
+
+# Bitta mijoz uchun kuniga ko'pi bilan shuncha qo'ng'iroq qayta ishlanadi (suiiste'mol va API limitidan himoya)
+MAX_CALLS_PER_DAY = int(os.environ.get("MAX_CALLS_PER_DAY", "5000"))

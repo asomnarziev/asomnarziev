@@ -37,6 +37,12 @@ def process_call(db: Session, account_id: int, uuid: str) -> None:
     except Exception:  # (account_id, uuid) takror — webhook qayta yuborilgan
         db.rollback()
         return
+    day_start = now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today = db.query(CallLog).filter(CallLog.account_id == acc.id, CallLog.created_at >= day_start).count()
+    if acc.active and today > config.MAX_CALLS_PER_DAY:
+        log_row.status, log_row.error = "skipped", f"kunlik limit ({config.MAX_CALLS_PER_DAY}) oshdi"
+        db.commit()
+        return
     if not acc.active:
         log_row.status, log_row.error = "skipped", "obuna tugagan"
         db.commit()
