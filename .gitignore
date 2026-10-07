@@ -1,3 +1,6 @@
 state.json
 .env
 __pycache__/
+saas.db
+test.db
+.pytest_cache/

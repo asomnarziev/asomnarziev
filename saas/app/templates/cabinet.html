@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block body %}
+<h1>Kabinet</h1>
+<section><b>Obuna:</b> {{ "faol" if acc.active else "tugagan" }}, {{ acc.valid_until.strftime("%d.%m.%Y") }} gacha
+(<a href="/billing">tarif</a>)</section>
+<section><h3>1. OnlinePBX</h3>
+<form method="post" action="/cabinet/pbx">
+<p><input name="domain" value="{{ acc.pbx_domain }}" placeholder="company.onpbx.ru" required></p>
+<p><input name="key" type="password" placeholder="{{ 'API kalit saqlangan (o‘zgartirish uchun kiriting)' if acc.pbx_key_enc else 'API kalit' }}"></p>
+<button>Saqlash</button></form>
+<p class="muted">OnlinePBX panelida webhook manzili sifatida quyidagini kiriting:</p>
+<code>{{ hook_url }}</code></section>
+<section><h3>2. Telegram chatlar ({{ acc.chats|length }}/{{ acc.max_chats }})</h3>
+<p>Botni chatga ulash: <a href="{{ tg_link }}">{{ tg_link }}</a><br>
+<span class="muted">Guruh uchun botni guruhga qo'shib, <code>/start@{{ config.BOT_USERNAME }} {{ acc.link_code }}</code> yuboring.</span></p>
+<table>{% for c in acc.chats %}<tr><td><code>{{ c.chat_id }}</code></td>
+<td><form method="post" action="/cabinet/chat/{{ c.id }}/lang"><select name="lang" onchange="this.form.submit()">
+{% for k,v in langs.items() %}<option value="{{ k }}" {{ "selected" if k==c.lang }}>{{ v }}</option>{% endfor %}</select></form></td>
+<td><form method="post" action="/cabinet/chat/{{ c.id }}/delete"><button>O'chirish</button></form></td></tr>{% endfor %}</table>
+<form method="post" action="/cabinet/chat"><p>yoki qo'lda:
+<input name="chat_id" placeholder="Chat ID" required>
+<select name="lang">{% for k,v in langs.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+<button>Qo'shish</button></p></form></section>
+<section><h3>So'nggi qo'ng'iroqlar</h3><table>
+{% for l in acc.logs[:20] %}<tr><td>{{ l.created_at.strftime("%d.%m %H:%M") }}</td><td>{{ l.status }}</td><td class="muted">{{ l.error }}</td></tr>
+{% else %}<tr><td class="muted">Hali yo'q</td></tr>{% endfor %}</table></section>
+{% endblock %}

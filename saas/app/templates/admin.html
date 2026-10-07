@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block body %}
+<h1>Admin</h1>
+<section><h3>Kutilayotgan to'lovlar</h3><table>
+{% for p in payments %}<tr><td>{{ p.account.user.email }}</td><td>{{ p.plan }}</td><td>{{ p.amount }}</td>
+<td><form method="post" action="/admin/payment/{{ p.id }}/confirm"><button>Tasdiqlash</button></form></td></tr>
+{% else %}<tr><td class="muted">Yo'q</td></tr>{% endfor %}</table></section>
+<section><h3>Mijozlar</h3><table><tr><th>Email</th><th>PBX</th><th>Chat</th><th>Gacha</th><th></th></tr>
+{% for a in accounts %}<tr><td>{{ a.user.email }}</td><td>{{ a.pbx_domain }}</td><td>{{ a.chats|length }}</td>
+<td>{{ a.valid_until.strftime("%d.%m.%Y") }}</td>
+<td><form method="post" action="/admin/account/{{ a.id }}/suspend"><button>{{ "Yoqish" if a.suspended else "To'xtatish" }}</button></form></td></tr>{% endfor %}</table></section>
+{% endblock %}

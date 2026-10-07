@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block body %}
+<h1>Tarif</h1>
+<p>Amal qilish muddati: {{ acc.valid_until.strftime("%d.%m.%Y") }}</p>
+{% for k,p in plans.items() %}<section><h3>{{ p.name }} — {{ "{:,}".format(p.price).replace(",", " ") }} so'm / {{ p.days }} kun</h3>
+<p>{{ p.max_chats }} tagacha chat</p>
+<form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="{{ k }}"><button>To'lov so'rovi yuborish</button></form></section>{% endfor %}
+<p class="muted">To'lov so'rovi yuborilgach administrator to'lovni tasdiqlaydi va obuna faollashadi.</p>
+{% endblock %}
