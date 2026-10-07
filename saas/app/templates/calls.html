@@ -1,5 +1,6 @@
 {% extends "base.html" %}{% from "icons.html" import i %}{% set active="calls" %}{% block body %}
-<div class="head"><h1>Qo'ng'iroqlar</h1><p>{{ total }} ta natija · {{ start.strftime("%d.%m.%Y") }} — {{ end.strftime("%d.%m.%Y") }}</p></div>
+<div class="head"><h1>Qo'ng'iroqlar</h1><p><span id="live-count">{{ total }} ta natija · {{ start.strftime("%d.%m.%Y") }} — {{ end.strftime("%d.%m.%Y") }}</span></p><span class="livetag"><span id="live-dot" class="live off"></span>jonli</span></div>
+<div id="live-banner"><span></span><button type="button" class="sm">Yangilash</button></div>
 {% if ok == "sent" %}<p class="ok">Yozuv Telegramga yuborildi.</p>{% endif %}
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
 
@@ -16,9 +17,9 @@
  <div><button style="width:100%">Qidirish</button></div>
 </div></form></div>
 
-<div class="card calls"><div class="scroll"><table class="tbl stack">
+<div class="card calls" id="live-area"><div class="scroll"><table class="tbl stack">
 <thead><tr><th>Vaqt</th><th>Kimdan</th><th>Kimga</th><th class="hide-sm">Yo'nalish</th><th>Suhbat</th><th></th></tr></thead><tbody>
-{% for r in rows %}{% set e, x = parties(r) %}<tr>
+{% for r in rows %}{% set e, x = parties(r) %}<tr data-id="{{ r.id }}">
  <td data-l="Vaqt">{{ local(r.started_at).strftime("%d.%m %H:%M") }}</td>
  <td data-l="Kimdan"><code>{{ r.caller or "—" }}</code></td><td data-l="Kimga"><code>{{ r.callee or "—" }}</code></td>
  <td class="hide-sm">{% if r.direction=="inbound" %}<span class="badge">kiruvchi</span>{% elif r.direction=="outbound" %}<span class="badge ok">chiquvchi</span>{% else %}<span class="muted">{{ r.direction or "—" }}</span>{% endif %}</td>
@@ -35,3 +36,4 @@
  {% if page < pages %}<a href="/calls?{{ base }}&page={{ page+1 }}">Keyingi →</a>{% endif %}</div>{% endif %}
 </div>
 {% endblock %}
+{% block scripts %}{% include "live_js.html" %}{% endblock %}

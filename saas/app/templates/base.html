@@ -106,6 +106,13 @@ code{font:.88em var(--mono);background:var(--line2);padding:1px 6px;border-radiu
 @media(max-width:560px){.two{grid-template-columns:1fr}}
 .filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;align-items:end;margin-bottom:6px}
 .filters label.l{margin:0 0 3px}.filters input,.filters select{width:100%}
+.live{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--muted);vertical-align:middle;margin-right:6px}
+.live.on{background:var(--ok);box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent);animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.livetag{font:12px var(--mono);color:var(--muted);float:right;margin-top:-34px}
+#live-banner{display:none;align-items:center;gap:10px;justify-content:space-between;margin:0 0 12px;padding:8px 12px;border:1px solid var(--ok);border-radius:var(--r);background:var(--ok-bg);color:var(--ok);font:600 13px var(--mono)}
+@keyframes fresh{from{background:color-mix(in srgb,var(--ok) 30%,transparent)}to{background:transparent}}
+tr.fresh>td{animation:fresh 4s ease-out}
 .btn.ghost{background:var(--card);color:var(--text);border-color:var(--line)}.btn.ghost:hover{background:var(--line2);color:var(--text)}
 .calls .rec{display:none;padding:8px 10px;background:var(--card2)}.calls .rec.open{display:table-cell}.calls .rec audio{width:100%;height:36px}
 @media(max-width:560px){
@@ -172,6 +179,7 @@ code{font:.88em var(--mono);background:var(--line2);padding:1px 6px;border-radiu
 </div></div>
 {% else %}{% block anon %}{% endblock %}{% endif %}
 <div id="toast"></div>
+{% block scripts %}{% endblock %}
 <script>
 function toast(t){var e=document.getElementById('toast');e.textContent=t;e.classList.add('show');setTimeout(function(){e.classList.remove('show')},1800)}
 function copyText(id){var el=document.getElementById(id);var t=el.dataset.copy||el.innerText;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){toast('Nusxalandi ✓')},function(){toast('Nusxalab bo‘lmadi')})}

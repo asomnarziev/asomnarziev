@@ -1,16 +1,19 @@
+import asyncio
+import json
 import time as _time
 from collections import defaultdict, deque
 from datetime import timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import config, receipts, reports, scheduler, service, telegram
-from .db import get_db
+from . import config, live, receipts, reports, scheduler, service, telegram
+from .db import SessionLocal, get_db
 from .messages import LANGS, TEMPLATES
 from .models import Account, CallLog, Chat, Payment, User, now, token
 from .pbx import PbxClient, PbxError
@@ -341,6 +344,42 @@ def call_resend(cid: int, user: User = Depends(require_user), db: Session = Depe
         except Exception:
             pass
     return go("/calls?ok=sent" if sent else "/calls?error=" + quote_plus("Telegramga yuborib bo'lmadi: chatlarni tekshiring"))
+
+
+def _live_account(uid) -> int | None:
+    """Sessiyadagi foydalanuvchi akkaunt ID'si, agar jonli yangilanish (Pro: hisobot yoki qidiruv) ruxsat etilgan bo'lsa.
+    Baza sessiyasi shu yerda yopiladi: uzoq oqim davomida ulanish band qilinmaydi."""
+    with SessionLocal() as db:
+        user = db.get(User, uid) if uid else None
+        if user and (_reports_allowed(user) or _can_search(user)):
+            return user.account.id
+    return None
+
+
+@router.get("/live/stream")
+async def live_stream(request: Request):
+    """SSE: yangi qo'ng'iroq kelganda sahifa yangilanishi uchun hodisa. Sessiya cookie bilan himoyalangan."""
+    account_id = await run_in_threadpool(_live_account, request.session.get("uid"))
+    if account_id is None:
+        raise HTTPException(403, "Jonli yangilanish Pro tarifda")
+    sub = live.subscribe(account_id, asyncio.get_running_loop())
+    if sub is None:
+        raise HTTPException(429, "Ochiq sahifalar juda ko'p")
+
+    async def events():
+        try:
+            yield "retry: 3000\n: connected\n\n"
+            while not await request.is_disconnected():
+                try:
+                    ev = await asyncio.wait_for(sub.queue.get(), live.KEEPALIVE)
+                    yield f"event: call\ndata: {json.dumps(ev)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            live.unsubscribe(sub)
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"})
 
 
 def _reports_allowed(user: User) -> bool:

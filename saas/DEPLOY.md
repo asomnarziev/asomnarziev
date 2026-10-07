@@ -102,3 +102,10 @@ Ikkalasi ham faqat **Pro** tarifda (`features`: `missed_alerts`, `search`).
 - **Javobsiz qo'ng'iroq:** kiruvchi qo'ng'iroqqa javob berilmasa, ulangan chatlarga darrov "📵 Javobsiz qo'ng'iroq" xabari (kim, kimga, qachon, necha soniya jiringlagan) o'z tilida keladi. Yozuv bo'lmagani uchun OnlinePBX API'dan yozuv so'ralmaydi. Kabinetdagi "Hisobot va ogohlantirishlar" kartasida o'chirib qo'yish mumkin. Chiquvchi javobsiz qo'ng'iroqlar bunga kirmaydi. **Webhook'da "Завершили" hodisasi yoqilgan bo'lishi kerak** (javobsiz qo'ng'iroq ham shu hodisa bilan keladi; kelmasa "Пропущенный" ni ham yoqing).
 - **Qidiruv (`/calls`):** raqam (qisman), xodim, yo'nalish, holat va sana bo'yicha; sahifasiga 50 tadan. Yozuvni saytda tinglash/yuklab olish va Telegramga qayta yuborish mumkin. Yozuv har safar OnlinePBX'dan olinadi, shuning uchun soatiga `MAX_RECORD_FETCH_PER_HOUR` (standart 60) tadan ko'p emas.
 - Qidiruv faqat yangilangandan keyin saqlangan qo'ng'iroqlarni topadi.
+
+## Jonli yangilanish (Pro)
+**Hisobotlar** va **Qo'ng'iroqlar** sahifalari ochiq tursa, yangi qo'ng'iroq kelishi bilan o'zi yangilanadi (sarlavhada yashil "jonli" nuqta). Yangi qatorlar bir necha soniya yorug' ko'rinadi. Foydalanuvchi pleyerni ochgan yoki yozuv eshitayotgan bo'lsa, sahifa o'zi almashmaydi: "N ta yangi qo'ng'iroq — Yangilash" paneli chiqadi.
+- Texnik: Server-Sent Events (`/live/stream`), bazani band qilmaydi; bitta mijoz uchun 10 tagacha ochiq sahifa; 25 soniyada bir "ping".
+- Faqat **bitta uvicorn worker** bilan ishlaydi (hodisalar jarayon xotirasida). Hozirgi systemd sozlamasi shunday.
+- nginx: javobdagi `X-Accel-Buffering: no` sarlavhasi bufferlashni o'zi o'chiradi, qo'shimcha sozlash odatda kerak emas. Agar "jonli" nuqta yonmasa, `location /` ga `proxy_buffering off; proxy_http_version 1.1; proxy_read_timeout 1h;` qo'shing va `nginx -s reload` qiling.
+- Ulanish uzilsa brauzer 3 soniyada o'zi qayta ulanadi va o'tkazib yuborilganini yangilaydi.

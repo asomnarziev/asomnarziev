@@ -1,5 +1,6 @@
 {% extends "base.html" %}{% from "icons.html" import i %}{% set active="reports" %}{% block body %}
-<div class="head"><h1>Hisobotlar</h1><p>{{ start.strftime("%d.%m.%Y") }} — {{ end.strftime("%d.%m.%Y") }} (Toshkent vaqti)</p></div>
+<div class="head"><h1>Hisobotlar</h1><p>{{ start.strftime("%d.%m.%Y") }} — {{ end.strftime("%d.%m.%Y") }} (Toshkent vaqti)</p><span class="livetag"><span id="live-dot" class="live off"></span>jonli</span></div>
+<div id="live-banner"><span></span><button type="button" class="sm">Yangilash</button></div>
 
 <div class="tabs">
  {% for k,l in (("today","Bugun"),("7d","7 kun"),("30d","30 kun"),("90d","90 kun")) %}<a class="{{ 'on' if mode==k }}" href="/reports?period={{ k }}">{{ l }}</a>{% endfor %}
@@ -8,6 +9,7 @@
  <a href="/reports.csv?{{ qs }}">{{ i("download",14) }} CSV</a>
 </div>
 
+<div id="live-area">
 <div class="kpis">
  <div class="stat"><div><small>Jami qo'ng'iroq</small><b>{{ r.total }}</b></div></div>
  <div class="stat"><div><small>Javob berilgan</small><b>{{ r.answered }}</b> <span class="muted small">{{ r.answer_rate }}%</span></div></div>
@@ -35,4 +37,6 @@
 {% for e in r.employees %}<tr><td><code>{{ e.ext }}</code></td><td><b>{{ e.calls }}</b></td><td>{{ e["in"] }}</td><td>{{ e.out }}</td><td>{% if e.missed %}<span class="badge warn">{{ e.missed }}</span>{% else %}0{% endif %}</td><td>{{ e.talk_fmt }}</td></tr>
 {% else %}<tr><td colspan="6" class="empty">Xodimlar aniqlanmadi</td></tr>{% endfor %}</tbody></table></div></div>
 {% endif %}
+</div>
 {% endblock %}
+{% block scripts %}{% include "live_js.html" %}{% endblock %}

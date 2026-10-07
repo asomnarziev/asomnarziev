@@ -7,7 +7,7 @@ from html import escape as _escape
 
 from sqlalchemy.orm import Session
 
-from . import config, receipts, telegram
+from . import config, live, receipts, telegram
 from .messages import DEFAULT_LANG, LANGS, TEMPLATES, audio_name, render_call, render_missed
 from .db import SessionLocal
 from .models import Account, CallLog, Chat, Payment, now
@@ -84,6 +84,7 @@ def process_call(db: Session, account_id: int, uuid: str) -> None:
         call = pbx.call_info(uuid) or {"uuid": uuid}
         store_call_stats(log_row, call)
         db.commit()  # hisobot ma'lumoti Telegram yuborilmasa ham saqlanadi
+        live.publish(acc.id, {"id": log_row.id, "direction": log_row.direction})  # ochiq sahifalar yangilansin
         if acc.missed_on and acc.can("missed_alerts") and is_missed_inbound(call, log_row):
             # Pro: javobsiz kiruvchi qo'ng'iroq -> darrov ogohlantirish; yozuv yo'q, shuning uchun API'dan so'ramaymiz
             for chat in acc.chats:
