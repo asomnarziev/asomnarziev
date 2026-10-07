@@ -5,7 +5,7 @@ FastAPI + PostgreSQL. Har mijoz o'z OnlinePBX stansiyasini ulaydi, qo'ng'iroq yo
 ## Oqim
 1. Mijoz ro'yxatdan o'tadi (sinov muddati `TRIAL_DAYS`) → kabinetda OnlinePBX domeni va API kalitini kiritadi (kalit Fernet bilan shifrlanadi).
 2. Kabinetdagi webhook manzili (`/hook/<token>`) OnlinePBX'ga kiritiladi.
-3. Chat ulash: kabinetdagi `t.me/<bot>?start=<kod>` havolasi (guruhda `/start@bot <kod>`) yoki Chat ID'ni qo'lda kiritish. Til: tugma yoki kabinetda.
+3. Chat ulash: kabinetdagi `t.me/<bot>?start=<kod>` havolasi (guruhda `/start@bot <kod>`) yoki Chat ID'ni qo'lda kiritish. Til faqat kabinetda tanlanadi (Telegramda til tugmalari yo'q).
 4. Webhook kelganda: yozuv OnlinePBX API'dan olinadi va akkauntning barcha chatlariga shablon bo'yicha yuboriladi (takror uuid e'tiborsiz).
 5. Obuna tugasa yuborish to'xtaydi; tarif `config.py` dagi `PLANS`.
 

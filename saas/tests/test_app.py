@@ -97,16 +97,16 @@ def test_webhook_sends_per_chat_language(client, monkeypatch):
     assert client.post("/hook/bad", data={"uuid": "u"}).status_code == 404
 
 
-def test_telegram_link_and_lang(client, monkeypatch):
+def test_telegram_link_and_language_only_in_panel(client, monkeypatch):
     register(client)
     msgs = []
-    monkeypatch.setattr(telegram, "send_message", lambda chat, text, markup=None: msgs.append(text))
-    monkeypatch.setattr(telegram, "answer_callback", lambda *a: None)
+    monkeypatch.setattr(telegram, "send_message", lambda chat, text, markup=None: msgs.append(markup))
     with SessionLocal() as db:
         code = db.query(Account).one().link_code
     upd = {"message": {"text": f"/start {code}", "chat": {"id": 77}}}
     client.post("/tg/tg-secret", json=upd)
-    client.post("/tg/tg-secret", json={"callback_query": {"id": "1", "data": "lang:ru", "message": {"chat": {"id": 77}}}})
+    assert msgs == [None]  # Telegramda til tugmalari yo'q
+    client.post("/cabinet/chat/1/lang", data={"lang": "ru"})
     with SessionLocal() as db:
         assert db.query(Chat).one().lang == "ru"
     assert client.post("/tg/wrong", json=upd).status_code == 404

@@ -23,10 +23,6 @@ def send_audio(chat_id, caption, audio: bytes, filename: str):
                  files={"audio": (filename, audio, "audio/mpeg")})
 
 
-def answer_callback(cb_id, text):
-    return _call("answerCallbackQuery", data={"callback_query_id": cb_id, "text": text})
-
-
 def set_webhook():
     url = f"{config.BASE_URL}/tg/{config.TG_WEBHOOK_SECRET}"
-    return _call("setWebhook", data={"url": url, "allowed_updates": json.dumps(["message", "channel_post", "callback_query"])})
+    return _call("setWebhook", data={"url": url, "allowed_updates": json.dumps(["message", "channel_post"])})

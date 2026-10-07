@@ -45,39 +45,26 @@ def process_call(db: Session, account_id: int, uuid: str) -> None:
     db.commit()
 
 
-def lang_markup():
-    return {"inline_keyboard": [[{"text": n, "callback_data": f"lang:{c}"} for c, n in LANGS.items()]]}
-
-
 def handle_update(db: Session, u: dict) -> None:
-    msg, cb = u.get("message") or u.get("channel_post"), u.get("callback_query")
-    if msg and msg.get("text", "").startswith("/"):
-        chat_id = str(msg["chat"]["id"])
-        is_channel = msg["chat"].get("type") == "channel"  # kanalda tugma bosishni hamma ko'ra oladi — til kabinetdan
-        cmd, _, arg = msg["text"].partition(" ")
-        cmd = cmd.split("@")[0]
-        if cmd == "/start" and arg.strip():
-            acc = db.query(Account).filter_by(link_code=arg.strip()).first()
-            if not acc:
-                telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["bad_code"])
-                return
-            if not any(c.chat_id == chat_id for c in acc.chats):
-                if len(acc.chats) >= acc.max_chats:
-                    telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["limit"])
-                    return
-                db.add(Chat(account_id=acc.id, chat_id=chat_id, lang=DEFAULT_LANG))
-                db.commit()
-            telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["linked"], None if is_channel else lang_markup())
-        elif cmd in ("/start", "/lang") and not is_channel:
-            telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["start"], lang_markup())
-    elif cb and cb.get("data", "").startswith("lang:"):
-        chat_id, lang = str(cb["message"]["chat"]["id"]), cb["data"][5:]
-        if lang in LANGS:
-            for c in db.query(Chat).filter_by(chat_id=chat_id):
-                c.lang = lang
-            db.commit()
-            telegram.answer_callback(cb["id"], TEMPLATES[lang]["lang_set"])
-            telegram.send_message(chat_id, TEMPLATES[lang]["lang_set"])
+    """Telegramda faqat /start <kod> (chatni ulash). Chat tili kabinetdan o'zgartiriladi."""
+    msg = u.get("message") or u.get("channel_post")
+    if not (msg and msg.get("text", "").startswith("/")):
+        return
+    chat_id = str(msg["chat"]["id"])
+    cmd, _, arg = msg["text"].partition(" ")
+    if cmd.split("@")[0] != "/start" or not arg.strip():
+        return
+    acc = db.query(Account).filter_by(link_code=arg.strip()).first()
+    if not acc:
+        telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["bad_code"])
+        return
+    if not any(c.chat_id == chat_id for c in acc.chats):
+        if len(acc.chats) >= acc.max_chats:
+            telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["limit"])
+            return
+        db.add(Chat(account_id=acc.id, chat_id=chat_id, lang=DEFAULT_LANG))
+        db.commit()
+    telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["linked"])
 
 
 def confirm_payment(db: Session, payment: Payment) -> None:
