@@ -1,8 +1,12 @@
-{% extends "base.html" %}{% block body %}
+{% extends "base.html" %}{% set active="billing" %}{% block body %}
 <h1>Tarif</h1>
-<p>Amal qilish muddati: {{ acc.valid_until.strftime("%d.%m.%Y") }}</p>
-{% for k,p in plans.items() %}<section><h3>{{ p.name }} — {{ "{:,}".format(p.price).replace(",", " ") }} so'm / {{ p.days }} kun</h3>
-<p>{{ p.max_chats }} tagacha chat</p>
-<form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="{{ k }}"><button>To'lov so'rovi yuborish</button></form></section>{% endfor %}
+<div class="card"><span class="muted">Amal qilish muddati:</span> <b>{{ acc.valid_until.strftime("%d.%m.%Y") }}</b>
+{% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</div>
+<div class="plans">
+{% for k,p in plans.items() %}<div class="card plan"><h3>{{ p.name }}</h3>
+<div class="price">{{ "{:,}".format(p.price).replace(",", " ") }} <small>so'm / {{ p.days }} kun</small></div>
+<ul><li>{{ p.max_chats }} tagacha chat</li><li>O'zbekcha va ruscha shablonlar</li><li>Cheksiz qo'ng'iroq yozuvlari</li></ul>
+<form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="{{ k }}"><button style="width:100%">To'lov so'rovi yuborish</button></form></div>{% endfor %}
+</div>
 <p class="muted">To'lov so'rovi yuborilgach administrator to'lovni tasdiqlaydi va obuna faollashadi.</p>
 {% endblock %}

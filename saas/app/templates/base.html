@@ -1,16 +1,61 @@
 <!doctype html>
-<html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="uz"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PBX → Telegram</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M9 22V10l14 6z' fill='%23fff'/%3E%3C/svg%3E">
 <style>
-body{font-family:system-ui,sans-serif;max-width:760px;margin:0 auto;padding:16px;line-height:1.5}
-nav{display:flex;gap:12px;align-items:center;margin-bottom:16px}nav form{margin-left:auto}
-section{border:1px solid #ccc;border-radius:8px;padding:12px 16px;margin:12px 0}
-input,select,button{padding:6px 10px;font:inherit}input{max-width:100%}
-table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #eee;padding:4px;text-align:left}
-.err{color:#b00}.muted{color:#666;font-size:.9em}code{word-break:break-all}
+:root{--bg:#f4f6fa;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#e2e8f0;--brand:#2563eb;--brand-d:#1d4ed8;
+--ok:#15803d;--ok-bg:#dcfce7;--err:#b91c1c;--err-bg:#fee2e2;--warn:#a16207;--warn-bg:#fef3c7;--soft:#eef2ff;--r:12px}
+@media(prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#131c2e;--text:#e5e9f2;--muted:#94a3b8;--line:#23304a;--brand:#3b82f6;--brand-d:#60a5fa;
+--ok:#4ade80;--ok-bg:#12301f;--err:#f87171;--err-bg:#3a1517;--warn:#facc15;--warn-bg:#3a2e0b;--soft:#182544}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--brand);text-decoration:none}a:hover{text-decoration:underline}
+.top{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.top .in{max-width:900px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.brand{font-weight:700;display:flex;align-items:center;gap:8px;margin-right:12px;color:var(--text)}
+.brand i{width:26px;height:26px;border-radius:7px;background:var(--brand);display:inline-grid;place-items:center;color:#fff;font-style:normal;font-size:13px}
+.top a.nav{padding:6px 12px;border-radius:8px;color:var(--muted);font-weight:500}
+.top a.nav:hover,.top a.nav.on{background:var(--soft);color:var(--brand);text-decoration:none}
+.top form{margin-left:auto}
+main{max-width:900px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.5rem;margin:.2em 0 .8em}h3{margin:0 0 .6em;font-size:1.05rem}h4{margin:1em 0 .4em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;margin:0 0 16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card h3 .n{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--soft);color:var(--brand);font-size:13px;margin-right:8px}
+.muted{color:var(--muted);font-size:.9em}.err{color:var(--err);background:var(--err-bg);padding:8px 12px;border-radius:8px}
+.ok{color:var(--ok);background:var(--ok-bg);padding:8px 12px;border-radius:8px;word-break:break-word}
+input,select{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 11px;max-width:100%}
+input:focus,select:focus{outline:2px solid var(--brand);outline-offset:-1px}
+button,.btn{font:inherit;font-weight:600;cursor:pointer;border:1px solid transparent;border-radius:8px;padding:8px 14px;background:var(--brand);color:#fff}
+button:hover{background:var(--brand-d)}
+button.ghost{background:transparent;color:var(--text);border-color:var(--line)}button.ghost:hover{background:var(--soft)}
+button.danger{background:transparent;color:var(--err);border-color:var(--line)}button.danger:hover{background:var(--err-bg)}
+button.sm,input.sm,select.sm{padding:5px 10px;font-size:.9em}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row.grow>input{flex:1;min-width:160px}
+.copy{display:flex;gap:8px;align-items:stretch;margin:.4em 0}
+.copy code{flex:1;background:var(--bg);border:1px dashed var(--line);border-radius:8px;padding:9px 12px;word-break:break-all;font-size:.88em}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:.8em;font-weight:600;background:var(--soft);color:var(--brand)}
+.badge.ok{background:var(--ok-bg);color:var(--ok);padding:2px 10px}.badge.err{background:var(--err-bg);color:var(--err);padding:2px 10px}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.stat{display:flex;gap:12px;flex-wrap:wrap}.stat>div{flex:1;min-width:150px;background:var(--bg);border-radius:10px;padding:12px 14px}
+.stat b{display:block;font-size:1.25rem}
+.tbl{width:100%;border-collapse:collapse}.tbl th{font-size:.8em;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+.tbl td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}.tbl tr:last-child td{border-bottom:0}
+.scroll{overflow-x:auto}
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.plan{margin:0}.plan .price{font-size:1.7rem;font-weight:800}.plan .price small{font-size:.5em;font-weight:500;color:var(--muted)}
+.plan ul{padding-left:18px;margin:.6em 0 1em;color:var(--muted)}
+.auth{max-width:380px;margin:8vh auto 0}.auth .card{padding:26px}.auth h1{text-align:center;margin-top:0}.auth input{width:100%;margin:5px 0 12px}.auth button{width:100%;padding:10px}
+.logo{display:grid;place-items:center;width:46px;height:46px;border-radius:12px;background:var(--brand);color:#fff;font-size:20px;margin:0 auto 14px}
+.empty{text-align:center;color:var(--muted);padding:14px}
+@media(max-width:560px){.top .brand{width:100%}.card{padding:14px}.hide-sm{display:none}}
 </style></head><body>
-{% if user %}<nav><a href="/cabinet">Kabinet</a><a href="/billing">Tarif</a>
-{% if user.is_admin %}<a href="/admin">Admin</a>{% endif %}
-<form method="post" action="/logout"><button>Chiqish</button></form></nav>{% endif %}
-{% block body %}{% endblock %}
+{% if user %}<header class="top"><div class="in">
+<a class="brand" href="/cabinet"><i>▶</i>PBX → Telegram</a>
+<a class="nav {{ 'on' if active=='cabinet' }}" href="/cabinet">Kabinet</a>
+<a class="nav {{ 'on' if active=='billing' }}" href="/billing">Tarif</a>
+{% if user.is_admin %}<a class="nav {{ 'on' if active=='admin' }}" href="/admin">Admin</a>{% endif %}
+<form method="post" action="/logout"><button class="ghost sm">Chiqish</button></form></div></header>{% endif %}
+<main>{% block body %}{% endblock %}</main>
 </body></html>
