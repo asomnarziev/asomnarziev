@@ -70,7 +70,10 @@ def test_manual_add_rejected_when_bot_cannot_write(client, monkeypatch):
     register(client)
     def boom(*a, **k): raise RuntimeError("403")
     monkeypatch.setattr(telegram, "send_message", boom)
-    assert client.post("/cabinet/chat", data={"chat_id": "-1005", "lang": "uz"}).status_code == 400
+    r = client.post("/cabinet/chat", data={"chat_id": "-1005", "lang": "uz"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/cabinet?error=")
+    with SessionLocal() as db:
+        assert db.query(Chat).count() == 0
 
 
 def test_chat_limit(client):
@@ -573,3 +576,28 @@ def test_receipt_with_comment_and_comment_shown_to_customer(client, pay):
     assert "ok=1" in r.headers["location"]
     assert pay[0][2] == "image/png" and "Izoh: to'lov 14:20" in pay[0][1]
     assert "to'lov 14:20" in client.get("/billing").text.replace("&#39;", "'")
+
+
+def test_manual_chat_errors_are_shown_on_page_with_telegram_reason(client, monkeypatch):
+    register(client, "c@x.uz")
+    monkeypatch.undo()  # umumiy soxta send_message'ni olib tashlaymiz: haqiqiy telegram._call sinaladi
+
+    class Resp:
+        status_code = 400
+        def json(self): return {"ok": False, "description": "Bad Request: chat not found"}
+        def raise_for_status(self): raise AssertionError("raise_for_status ishlatilmasligi kerak")
+
+    monkeypatch.setattr(telegram.requests, "post", lambda *a, **k: Resp())
+    r = client.post("/cabinet/chat", data={"chat_id": "123456", "lang": "uz"}, follow_redirects=True)
+    assert r.status_code == 200 and "Chat qo'shilmadi" in r.text
+    assert "Chat topilmadi" in r.text and "chat not found" in r.text  # tushuntirish + Telegram sababi
+    assert '{"detail"' not in r.text  # xom JSON emas
+    bad = client.post("/cabinet/chat", data={"chat_id": "+998901234567", "lang": "uz"}, follow_redirects=True)
+    assert "Telefon raqam" in bad.text
+
+
+def test_telegram_explain_hints():
+    e = telegram.TelegramError("Forbidden: bot can't initiate conversation with a user")
+    assert "/start" in telegram.explain(e)
+    assert "administrator" in telegram.explain(telegram.TelegramError("Forbidden: bot is not a member of the channel chat"))
+    assert "Telegram: Something odd" in telegram.explain(telegram.TelegramError("Something odd"))

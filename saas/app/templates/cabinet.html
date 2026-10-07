@@ -2,6 +2,7 @@
 {% set pbx_ok = acc.pbx_domain and acc.pbx_key_enc %}{% set chat_ok = acc.chats|length > 0 %}{% set hook_ok = acc.logs|length > 0 %}
 {% set done = (1 if pbx_ok else 0) + (1 if chat_ok else 0) + (1 if hook_ok else 0) %}
 <div class="head"><h1>Kabinet</h1><p>OnlinePBX yozuvlarini Telegramga yuborishni sozlang</p></div>
+{% if error %}<p class="err"><b>Chat qo'shilmadi.</b> {{ error }}</p>{% endif %}
 
 <div class="stats">
  <div class="stat"><div class="ico">{{ i("shield") }}</div><div><small>Obuna</small><b>{% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</b></div></div>

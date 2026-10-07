@@ -69,9 +69,9 @@ def logout(request: Request):
 
 
 @router.get("/cabinet")
-def cabinet(request: Request, user: User = Depends(require_user)):
+def cabinet(request: Request, error: str | None = None, user: User = Depends(require_user)):
     acc = user.account
-    return render(request, "cabinet.html", user=user, acc=acc, now=now(),
+    return render(request, "cabinet.html", user=user, acc=acc, now=now(), error=error,
                   hook_url=f"{config.BASE_URL}/hook/{acc.hook_token}",
                   tg_link=f"https://t.me/{config.BOT_USERNAME}?start={acc.link_code}")
 
@@ -107,19 +107,23 @@ def test_message(user: User = Depends(require_user)):
 @router.post("/cabinet/chat")
 def add_chat(chat_id: str = Form(...), lang: str = Form("uz"), user: User = Depends(require_user),
              db: Session = Depends(get_db)):
+    from urllib.parse import quote_plus
+
+    def back(msg):  # xatoni xom JSON o'rniga kabinet sahifasida ko'rsatamiz
+        return go(f"/cabinet?error={quote_plus(msg)}")
+
     acc, chat_id = user.account, chat_id.strip()
     # shaxsiy/guruh/superguruh/kanal: 12345, -100123..., yoki ochiq kanal uchun @username
     valid = chat_id.lstrip("-").isdigit() or (chat_id.startswith("@") and len(chat_id) > 3)
     if not valid or lang not in LANGS:
-        raise HTTPException(400, "Chat ID raqam (-100... kanal/guruh) yoki @kanal bo'lishi kerak")
+        return back("Chat ID raqam (-100... kanal/guruh) yoki @kanal bo'lishi kerak. Telefon raqam yoki ism ishlamaydi.")
     if len(acc.chats) >= acc.max_chats:
-        raise HTTPException(400, "Chatlar limiti tugagan")
+        return back("Chatlar limiti tugagan. Tarifni yangilang.")
     if not any(c.chat_id == chat_id for c in acc.chats):
         try:  # bot shu chatga yoza olishini darrov tekshiramiz (kanalda bot admin bo'lishi kerak)
             telegram.send_message(chat_id, TEMPLATES[lang]["lang_set"])
-        except Exception:
-            raise HTTPException(400, "Bot bu chatga yoza olmadi. Shaxsiy chatda avval botga /start yuboring; "
-                                     "guruh/kanalga botni (kanalda admin sifatida) qo'shing.")
+        except Exception as e:
+            return back(telegram.explain(e))
         db.add(Chat(account_id=acc.id, chat_id=chat_id, lang=lang))
         db.commit()
     return go("/cabinet")
