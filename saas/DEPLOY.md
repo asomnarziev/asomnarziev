@@ -4,7 +4,7 @@ Ubuntu/Debian VPS (Docker'siz). Domen: `pbx.atcpbx.uz`, ilova `/opt/pbxbot` da, 
 
 ## 1. Birinchi o'rnatish
 
-**Talablar:** root huquqi, domenning A-yozuvi server IP'siga qaragan (`dig +short pbx.atcpbx.uz`; Cloudflare'da proxy **o'chiq**, "DNS only"), 80/443 portlar ochiq, @BotFather'dan bot tokeni.
+**Talablar:** root huquqi, domenning A-yozuvi server IP'siga qaragan (`dig +short pbx.atcpbx.uz`; Birinchi o'rnatishda Cloudflare'da proxy **o'chiq**, "DNS only"; keyin 8-bo'limga qarang), 80/443 portlar ochiq, @BotFather'dan bot tokeni.
 
 ```bash
 # 1) kod
@@ -119,3 +119,22 @@ Rasmiy limitlar noma'lum, shuning uchun ehtiyotkor standartlar (`.env` da sozlan
   `grep -q '^\s*server_tokens off' /etc/nginx/nginx.conf || sed -i '/^http {/a\    server_tokens off;' /etc/nginx/nginx.conf && nginx -t && systemctl reload nginx`.
   Yangilanishlar: `apt-get update && apt-get install --only-upgrade nginx`.
 - Xizmat `NoNewPrivileges`, `ProtectSystem=full`, `ProtectHome` va boshqa systemd cheklovlari bilan ishlaydi.
+
+## 9. Cloudflare orqali ishlatish (server IP'sini yashirish)
+
+Cloudflare proxy (to'q sariq bulut) yoqilsa, tashrif buyuruvchilar va xavfsizlik skanerlari sizning IP'ingiz va joylashuvingiz o'rniga Cloudflare'ni ko'radi; qo'shimcha DDoS himoyasi ham olinadi. **Tartib muhim:**
+
+```bash
+# 1) AVVAL serverda haqiqiy foydalanuvchi IP'sini tiklang (aks holda kirish himoyasi hammani bitta IP deb ko'rib, bloklab qo'yadi)
+bash /opt/pbxbot/saas/deploy/cloudflare-realip.sh
+```
+
+2. Cloudflare → **SSL/TLS → Overview: "Full (strict)"** (serverda Let's Encrypt sertifikati bor; "Flexible" qo'ysangiz cheksiz yo'naltirish xatosi chiqadi).
+3. Cloudflare → **DNS** → `pbx` yozuvini oching → Proxy status: **Proxied** (to'q sariq).
+4. Cloudflare → **Security**: *Bot Fight Mode* va *Under Attack* rejimini **o'chiring**, yoki WAF'da `/hook/*` va `/tg/*` yo'llari uchun "Skip" qoidasi qo'shing. Aks holda OnlinePBX va Telegram webhook'lari (brauzer emas, server so'rovlari) bloklanishi mumkin.
+5. Tekshiring: kirish ishlayaptimi; "jonli" nuqta yashilmi; OnlinePBX'da webhook "Тест" `200` qaytaradimi; botga `/id` yozing; `journalctl -u pbxbot | grep "POST /login"` da haqiqiy IP ko'rinadimi (Cloudflare IP'si emas).
+
+Cloudflare IP diapazonlari o'zgarsa skriptni qayta ishga tushiring (kamdan-kam). Sertifikat yangilanishi (certbot) proxy ortida ham ishlaydi; ishlamasa vaqtincha "DNS only" qiling.
+
+**Halol cheklov:** bu IP'ni to'liq "yo'q" qilmaydi. Eski DNS yozuvlari tarixi (siz IP'ni bir necha marta o'zgartirgansiz), boshqa subdomenlar yoki serverga to'g'ridan-to'g'ri ulanish orqali asl IP topilishi mumkin. To'liq yashirish uchun serverda 80/443 portlarini faqat Cloudflare diapazonlariga oching va (ideal holda) yangi IP oling. Registrator/ro'yxatga olish ma'lumotlari (WHOIS) esa IP'ga bog'liq emas: ularni faqat domen registratoringizdagi "WHOIS privacy" sozlamasi yashiradi.
+
