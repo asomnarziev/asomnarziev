@@ -83,3 +83,9 @@ sed -i 's/client_max_body_size 5m/client_max_body_size 12m/' /etc/nginx/sites-av
 cd /opt/pbxbot/saas && set -a && . ./.env && set +a && /opt/pbxbot/venv/bin/python -m app.setup_webhook   # tugmalar uchun callback_query yoqiladi
 ```
 Baza avtomatik yangilanadi (`payments` jadvaliga ustunlar qo'shiladi).
+
+## Hisobotlar (Pro tarif)
+`/reports` sahifasi faqat **Pro** tarifdagi mijozlarga (va administratorga) ochiladi: kunlar va soatlar bo'yicha grafiklar, xodimlar (ichki raqamlar) reytingi, eng ko'p qo'ng'iroq raqamlari, javobsiz qo'ng'iroqlar va CSV (Excel) eksport. Boshqa tarifdagilar "Pro tarifga o'ting" sahifasini ko'radi.
+Statistika webhook orqali kelgan qo'ng'iroqlardan to'planadi, shuning uchun yangilashdan **oldingi** qo'ng'iroqlar hisobotda bo'lmaydi. Bu OnlinePBX API limitiga tegmaslik uchun ham shunday: hisobot uchun API'ga qo'shimcha so'rov yuborilmaydi.
+Pro imkoniyatlari `app/config.py` dagi `PLANS[...]["features"]` da belgilanadi (yangi pullik imkoniyatni shu yerga qo'shib, `acc.can("nom")` bilan tekshiriladi).
+Javobsiz qo'ng'iroqlar to'liq ko'rinishi uchun OnlinePBX'da "Пропущенный" hodisasini ham webhook'ga yoqing (hozir faqat "Завершили").

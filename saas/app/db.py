@@ -20,18 +20,27 @@ def get_db():
         db.close()
 
 
-_PAYMENT_COLUMNS = {"months": "INTEGER DEFAULT 1", "receipt": "VARCHAR(100) DEFAULT ''", "note": "TEXT DEFAULT ''", "comment": "TEXT DEFAULT ''"}
+# Eski bazaga qo'shiladigan ustunlar (jadval -> {ustun: DDL}); Alembic o'rniga yengil migratsiya
+_NEW_COLUMNS = {
+    "payments": {"months": "INTEGER DEFAULT 1", "receipt": "VARCHAR(100) DEFAULT ''", "note": "TEXT DEFAULT ''",
+                 "comment": "TEXT DEFAULT ''"},
+    "call_logs": {"direction": "VARCHAR(10) DEFAULT ''", "caller": "VARCHAR(40) DEFAULT ''",
+                  "callee": "VARCHAR(40) DEFAULT ''", "started_at": "TIMESTAMP", "duration": "INTEGER DEFAULT 0",
+                  "talk": "INTEGER"},
+}
 
 
 def init_db():
-    """Jadvallarni yaratadi va eski bazaga yangi ustunlarni qo'shadi (Alembic o'rniga yengil migratsiya)."""
+    """Jadvallarni yaratadi va eski bazaga yangi ustunlarni qo'shadi."""
     from sqlalchemy import inspect, text
 
     Base.metadata.create_all(engine)
     insp = inspect(engine)
-    if insp.has_table("payments"):
-        have = {c["name"] for c in insp.get_columns("payments")}
-        with engine.begin() as conn:
-            for name, ddl in _PAYMENT_COLUMNS.items():
+    with engine.begin() as conn:
+        for table, columns in _NEW_COLUMNS.items():
+            if not insp.has_table(table):
+                continue
+            have = {c["name"] for c in insp.get_columns(table)}
+            for name, ddl in columns.items():
                 if name not in have:
-                    conn.execute(text(f"ALTER TABLE payments ADD COLUMN {name} {ddl}"))
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))

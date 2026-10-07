@@ -52,6 +52,11 @@ class Account(Base):
     def active(self) -> bool:
         return not self.suspended and self.valid_until > now()
 
+    def can(self, feature: str) -> bool:
+        """Pullik, faol obuna tarifida shu imkoniyat bormi (sinov muddatida pullik imkoniyatlar yopiq)."""
+        return (not self.suspended and self.paid_until is not None and self.paid_until > now()
+                and feature in config.PLANS.get(self.plan, {}).get("features", ()))
+
     @property
     def max_chats(self) -> int:
         if self.paid_until and self.paid_until > now():
@@ -78,6 +83,13 @@ class CallLog(Base):
     status: Mapped[str] = mapped_column(String(20), default="received")  # received/sent/error/skipped
     error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    # Hisobotlar uchun qo'ng'iroq ma'lumoti (OnlinePBX'dan olinadi; vaqt UTC)
+    direction: Mapped[str] = mapped_column(String(10), default="")        # inbound / outbound / local
+    caller: Mapped[str] = mapped_column(String(40), default="")
+    callee: Mapped[str] = mapped_column(String(40), default="")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    duration: Mapped[int] = mapped_column(Integer, default=0)             # umumiy davomiylik, soniya
+    talk: Mapped[int | None] = mapped_column(Integer, nullable=True)      # suhbat vaqti (javob berilgan bo'lsa), noma'lum bo'lsa None
     account: Mapped[Account] = relationship(back_populates="logs")
 
 

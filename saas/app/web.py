@@ -2,11 +2,11 @@ from datetime import timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from . import config, receipts, service, telegram
+from . import config, receipts, reports, service, telegram
 from .db import get_db
 from .messages import LANGS, TEMPLATES
 from .models import Account, Chat, Payment, User, now, token
@@ -194,6 +194,35 @@ async def checkout(bg: BackgroundTasks, plan: str = Form(...), months: int = For
     db.commit()
     bg.add_task(service.notify_admin_payment, p.id)
     return go("/billing?ok=1")
+
+
+def _reports_allowed(user: User) -> bool:
+    """Hisobotlar: Pro (reports imkoniyati bor, faol pullik obuna) yoki administrator."""
+    return user.is_admin or user.account.can("reports")
+
+
+@router.get("/reports")
+def reports_page(request: Request, period: str | None = None, frm: str | None = None, to: str | None = None,
+                 user: User = Depends(require_user), db: Session = Depends(get_db)):
+    if not _reports_allowed(user):
+        return render(request, "reports_locked.html", user=user, acc=user.account, plans=config.PLANS)
+    start, end, mode = reports.parse_period(period, frm, to)
+    rows = reports.load(db, user.account.id, start, end)
+    data = reports.build(rows, start, end)
+    return render(request, "reports.html", user=user, acc=user.account, r=data, start=start, end=end, mode=mode,
+                  day_svg=reports.day_chart(data["by_day"]), hour_svg=reports.hour_chart(data["by_hour"]),
+                  qs=f"frm={start.isoformat()}&to={end.isoformat()}")
+
+
+@router.get("/reports.csv")
+def reports_csv(period: str | None = None, frm: str | None = None, to: str | None = None,
+                user: User = Depends(require_user), db: Session = Depends(get_db)):
+    if not _reports_allowed(user):
+        raise HTTPException(403, "Hisobotlar Pro tarifda")
+    start, end, _ = reports.parse_period(period, frm, to)
+    body = reports.to_csv(reports.load(db, user.account.id, start, end, limit=reports.MAX_CSV_ROWS))
+    return Response(body, media_type="text/csv; charset=utf-8", headers={
+        "Content-Disposition": f'attachment; filename="qongiroqlar_{start}_{end}.csv"', "Cache-Control": "private, no-store"})
 
 
 @router.get("/receipt/{pid}")

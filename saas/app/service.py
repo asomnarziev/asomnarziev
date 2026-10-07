@@ -1,7 +1,7 @@
 """Biznes mantiq: qo'ng'iroqni yuborish, Telegram buyruqlari, to'lovni tasdiqlash."""
 import logging
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from html import escape as _escape
 
@@ -35,6 +35,23 @@ def fetch_record(pbx: PbxClient, uuid: str) -> bytes | None:
     return audio
 
 
+def store_call_stats(row: CallLog, call: dict) -> None:
+    """OnlinePBX qo'ng'iroq ma'lumotini hisobotlar uchun CallLog qatoriga yozadi."""
+    def num(v):
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return None
+
+    row.direction = str(call.get("accountcode") or "")[:10]
+    row.caller = str(call.get("caller_id_number") or "")[:40]
+    row.callee = str(call.get("destination_number") or "")[:40]
+    ts = num(call.get("start_stamp"))
+    row.started_at = datetime.fromtimestamp(ts, timezone.utc).replace(tzinfo=None) if ts else now()
+    row.duration = num(call.get("duration")) or 0
+    row.talk = num(call.get("user_talk_time"))
+
+
 def process_call(db: Session, account_id: int, uuid: str) -> None:
     """OnlinePBX webhook'dan keyin: ma'lumot + yozuvni olib, akkauntning barcha chatlariga yuboradi."""
     acc = db.get(Account, account_id)
@@ -58,6 +75,8 @@ def process_call(db: Session, account_id: int, uuid: str) -> None:
     try:
         pbx = PbxClient(acc.pbx_domain, decrypt(acc.pbx_key_enc))
         call = pbx.call_info(uuid) or {"uuid": uuid}
+        store_call_stats(log_row, call)
+        db.commit()  # hisobot ma'lumoti Telegram yuborilmasa ham saqlanadi
         audio = fetch_record(pbx, uuid)
         for chat in acc.chats:
             lang = chat.lang if chat.lang in LANGS else DEFAULT_LANG

@@ -12,10 +12,13 @@ CONTACT_PHONE = os.environ.get("CONTACT_PHONE", "+998948302407")
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "asomnarziev07@gmail.com")
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))
 
-# narx so'mda; days — obuna muddati
+# narx so'mda; days — obuna muddati; features — tarifga ochiladigan imkoniyatlar; perks — tarif kartasida ko'rsatiladigan ro'yxat
 PLANS = {
-    "start": {"name": "Start", "price": 99_000, "days": 30, "max_chats": 3},
-    "pro": {"name": "Pro", "price": 249_000, "days": 30, "max_chats": 20},
+    "start": {"name": "Start", "price": 99_000, "days": 30, "max_chats": 3, "features": (),
+              "perks": ["3 tagacha chat", "O'zbekcha va ruscha shablonlar", "Qo'ng'iroq yozuvlari Telegramga"]},
+    "pro": {"name": "Pro", "price": 249_000, "days": 30, "max_chats": 20, "features": ("reports",),
+            "perks": ["20 tagacha chat", "O'zbekcha va ruscha shablonlar", "Qo'ng'iroq yozuvlari Telegramga",
+                      "Hisobotlar: kunlar, soatlar, xodimlar bo'yicha statistika", "Hisobotni CSV (Excel) ga yuklab olish"]},
 }
 TRIAL_MAX_CHATS = 3
 

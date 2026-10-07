@@ -91,6 +91,19 @@ code{font:.88em var(--mono);background:var(--line2);padding:1px 6px;border-radiu
 .pay .top{display:flex;gap:10px 28px;flex-wrap:wrap;align-items:center}.pay .top>div{white-space:nowrap}
 .pay .acts{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}.pay form{margin:0}
 .plan:has(input:checked){border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+.side a.nav .pro{margin-left:auto;font:700 9.5px var(--mono);letter-spacing:.06em;color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 50%,transparent);border-radius:4px;padding:0 5px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.tabs a{font:600 12.5px var(--mono);padding:5px 12px;border:1px solid var(--line);border-radius:6px;color:var(--muted);background:var(--card)}
+.tabs a:hover{text-decoration:none;color:var(--text);background:var(--line2)}.tabs a.on{color:var(--text);border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+.tabs form{display:flex;gap:6px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:14px}
+.kpis .stat b{font-size:1.2rem;white-space:nowrap}.kpis .stat small span{color:var(--ok)}
+.chart{width:100%;height:auto;display:block}.chart rect{fill:var(--ok);opacity:.85}.chart rect:hover{opacity:1}
+.chart text{fill:var(--muted);font:10px var(--mono)}.chart.hrs rect{fill:var(--brand)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px}
+.bar{display:inline-block;height:6px;border-radius:3px;background:var(--ok);vertical-align:middle;min-width:2px}
+.lock{text-align:center;padding:34px 20px}.lock .ic{color:var(--ok);margin-bottom:10px}
+@media(max-width:560px){.two{grid-template-columns:1fr}}
 .empty{text-align:center;color:var(--muted);padding:22px 10px!important;font:13px var(--mono)}.empty .ic{display:block;margin:0 auto 6px;opacity:.5}
 .term{background:#010409;border:1px solid var(--line);border-radius:6px;font:12.5px/1.7 var(--mono);color:#c9d1d9;padding:10px 14px;overflow-x:auto;max-height:340px;overflow-y:auto}
 .term .ln{white-space:nowrap}.term .t{color:#6e7681}.term .s{font-weight:700}.term .s.ok{color:#3fb950;background:none;padding:0;border:0;display:inline}.term .s.err{color:#f85149;background:none;padding:0;border:0;display:inline}.term .s.warn{color:#d29922;background:none;padding:0;border:0;display:inline}
@@ -129,6 +142,7 @@ code{font:.88em var(--mono);background:var(--line2);padding:1px 6px;border-radiu
  <a class="logo" href="/cabinet" style="text-decoration:none"><i>&gt;_</i>pbx→tg</a>
  <div class="grp">Asosiy</div>
  <a class="nav {{ 'on' if active=='cabinet' }}" href="/cabinet">{{ i("home") }}Kabinet</a>
+ <a class="nav {{ 'on' if active=='reports' }}" href="/reports">{{ i("chart") }}Hisobotlar{% if not (user.is_admin or user.account.can("reports")) %}<span class="pro">PRO</span>{% endif %}</a>
  <a class="nav {{ 'on' if active=='billing' }}" href="/billing">{{ i("card") }}Tarif</a>
  {% if user.is_admin %}<div class="grp">Boshqaruv</div>
  <a class="nav {{ 'on' if active=='admin' }}" href="/admin">{{ i("shield") }}Admin</a>{% endif %}
@@ -138,7 +152,7 @@ code{font:.88em var(--mono);background:var(--line2);padding:1px 6px;border-radiu
 </aside>
 <div class="main">
  <nav class="mtop"><span class="logo"><i>&gt;_</i></span>
-  <a class="nav {{ 'on' if active=='cabinet' }}" href="/cabinet">Kabinet</a><a class="nav {{ 'on' if active=='billing' }}" href="/billing">Tarif</a>
+  <a class="nav {{ 'on' if active=='cabinet' }}" href="/cabinet">Kabinet</a><a class="nav {{ 'on' if active=='reports' }}" href="/reports">Hisobot</a><a class="nav {{ 'on' if active=='billing' }}" href="/billing">Tarif</a>
   {% if user.is_admin %}<a class="nav {{ 'on' if active=='admin' }}" href="/admin">Admin</a>{% endif %}
   <form method="post" action="/logout"><button title="Chiqish">{{ i("out") }}</button></form></nav>
  <div class="wrap">{% block body %}{% endblock %}</div>

@@ -601,3 +601,130 @@ def test_telegram_explain_hints():
     assert "/start" in telegram.explain(e)
     assert "administrator" in telegram.explain(telegram.TelegramError("Forbidden: bot is not a member of the channel chat"))
     assert "Telegram: Something odd" in telegram.explain(telegram.TelegramError("Something odd"))
+
+
+# ---------- Hisobotlar (Pro) ----------
+def _utc(local_dt):
+    from datetime import timezone
+    return local_dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def seed_calls(account_id):
+    """Bugungi (Toshkent vaqti) 4 ta qo'ng'iroq: 2 javob berilgan, 2 javobsiz."""
+    from datetime import datetime, time
+    from app import reports
+    from app.messages import LOCAL_TZ
+    from app.models import CallLog
+    d = reports.today_local()
+    at = lambda h, m: _utc(datetime.combine(d, time(h, m), LOCAL_TZ))
+    rows = [("a", "inbound", "998901112233", "105", at(10, 0), 70, 60),
+            ("b", "outbound", "105", "998905556677", at(10, 30), 40, 30),
+            ("c", "outbound", "107", "998905556677", at(15, 0), 20, 0),
+            ("d", "inbound", "998901112233", "105", at(15, 10), 0, None)]
+    with SessionLocal() as db:
+        for u, dr, ca, ce, st, dur, talk in rows:
+            db.add(CallLog(account_id=account_id, uuid=u, status="sent", direction=dr, caller=ca, callee=ce,
+                           started_at=st, duration=dur, talk=talk))
+        db.commit()
+
+
+def make_pro(admin_client, account_id):
+    admin_client.post(f"/admin/account/{account_id}/subscription", data={"action": "extend", "plan": "pro", "days": "30"})
+
+
+def test_reports_locked_for_non_pro_and_pro_sees_data(client):
+    admin = client; register(admin, "admin@x.uz")
+    cust = TestClient(app); register(cust, "c@x.uz")
+    seed_calls(2)
+    page = cust.get("/reports").text
+    assert "Pro tarifda ochiladi" in page and "998901112233" not in page and ">PRO<" in page  # menyuda PRO belgisi
+    assert cust.get("/reports.csv").status_code == 403
+    make_pro(admin, 2)
+    page = cust.get("/reports").text
+    assert "Jami qo'ng'iroq" in page and "998901112233" in page and "Pro tarifda ochiladi" not in page
+    assert cust.get("/reports.csv").status_code == 200
+
+
+def test_reports_metrics_and_isolation(client):
+    from app import reports
+    admin = client; register(admin, "admin@x.uz")
+    cust = TestClient(app); register(cust, "c@x.uz")
+    other = TestClient(app); register(other, "z@x.uz")
+    seed_calls(2)
+    make_pro(admin, 2); make_pro(admin, 3)
+    d = reports.today_local()
+    with SessionLocal() as db:
+        rows = reports.load(db, 2, d, d)
+    r = reports.build(rows, d, d)
+    assert (r["total"], r["answered"], r["missed"], r["answer_rate"]) == (4, 2, 2, 50)
+    assert (r["inbound"], r["outbound"]) == (2, 2) and r["talk_total"] == "01:30" and r["talk_avg"] == "00:45"
+    assert r["by_hour"][10] == 2 and r["by_hour"][15] == 2 and r["busiest_hour"] == 10  # soatlar Toshkent vaqtida
+    emp = {e["ext"]: e for e in r["employees"]}
+    assert emp["105"]["calls"] == 3 and emp["105"]["in"] == 2 and emp["105"]["out"] == 1 and emp["105"]["missed"] == 1
+    assert emp["107"]["calls"] == 1 and emp["107"]["missed"] == 1
+    assert dict(r["top_numbers"]) == {"998901112233": 2, "998905556677": 2}
+    assert "<svg" in reports.day_chart(r["by_day"]) and reports.hour_chart(r["by_hour"]).count("<rect") == 24
+    assert "998901112233" not in other.get("/reports").text  # boshqa mijoz birovning statistikasini ko'rmaydi
+    assert "998901112233" not in other.get("/reports.csv").text
+
+
+def test_reports_period_parsing_and_csv(client):
+    from datetime import timedelta
+    from app import reports
+    s, e, mode = reports.parse_period("30d", None, None)
+    assert (e - s).days == 29 and mode == "30d" and e == reports.today_local()
+    assert reports.parse_period("bad", None, None)[2] == "7d"
+    t = reports.today_local()
+    assert reports.parse_period(None, (t - timedelta(days=3)).isoformat(), t.isoformat())[2] == "custom"
+    assert reports.parse_period(None, "2020-01-01", t.isoformat())[2] == "7d"  # >366 kun rad etiladi
+    assert reports.parse_period(None, "xx", "yy")[2] == "7d"
+    register(client, "admin@x.uz"); seed_calls(1)
+    body = client.get("/reports.csv?period=today").text
+    assert body.startswith("﻿Sana,") and "javob berilmagan" in body and body.count("\n") >= 5
+    assert "attachment" in client.get("/reports.csv?period=today").headers["content-disposition"]
+    assert reports._safe("=1+1") == "'=1+1" and reports._safe("@x") == "'@x" and reports._safe("-cmd") == "'-cmd"
+    assert reports._safe("+998901234567") == "+998901234567" and reports._safe("105") == "105"
+
+
+def test_call_stats_stored_even_if_telegram_fails(client, monkeypatch):
+    from app.models import CallLog
+    register(client, "c@x.uz")
+    client.post("/cabinet/pbx", data={"domain": "d.onpbx.ru", "key": "k"})
+    client.post("/cabinet/chat", data={"chat_id": "1", "lang": "uz"})
+
+    class FakePbx:
+        def __init__(self, *a): pass
+        def call_info(self, u): return {"uuid": u, "caller_id_number": "105", "destination_number": "935033635",
+                                        "accountcode": "outbound", "duration": "44", "user_talk_time": "40", "start_stamp": 1791358224}
+        def record(self, u): return b"mp3"
+
+    def boom(*a, **k): raise RuntimeError("telegram down")
+    monkeypatch.setattr(service, "PbxClient", FakePbx)
+    monkeypatch.setattr(telegram, "send_audio", boom)
+    with SessionLocal() as db:
+        service.process_call(db, 1, "u1")
+        row = db.query(CallLog).one()
+        assert row.status == "error"  # yuborilmadi, lekin statistika saqlangan
+        assert (row.direction, row.caller, row.callee, row.duration, row.talk) == ("outbound", "105", "935033635", 44, 40)
+        assert row.started_at.isoformat() == "2026-10-07T07:30:24"  # UTC
+
+
+def test_migration_adds_call_log_columns(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, inspect, text
+    from app import db as dbm
+    eng = create_engine(f"sqlite:///{tmp_path/'old2.db'}")
+    with eng.begin() as c:
+        c.execute(text("CREATE TABLE call_logs (id INTEGER PRIMARY KEY, account_id INTEGER, uuid VARCHAR(100), status VARCHAR(20), error TEXT, created_at DATETIME)"))
+        c.execute(text("INSERT INTO call_logs (account_id, uuid, status, error) VALUES (1,'u','sent','')"))
+    monkeypatch.setattr(dbm, "engine", eng)
+    dbm.init_db()
+    assert {"direction", "caller", "callee", "started_at", "duration", "talk"} <= {c["name"] for c in inspect(eng).get_columns("call_logs")}
+    with eng.connect() as c:
+        assert c.execute(text("SELECT direction, duration, talk, started_at FROM call_logs")).one() == ("", 0, None, None)
+
+
+def test_plan_features_and_billing_perks(client):
+    from app import config
+    register(client, "c@x.uz")
+    assert "Hisobotlar" in client.get("/billing").text
+    assert config.PLANS["pro"]["features"] == ("reports",) and config.PLANS["start"]["features"] == ()
