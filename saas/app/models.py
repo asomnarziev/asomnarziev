@@ -92,5 +92,6 @@ class Payment(Base):
     months: Mapped[int] = mapped_column(Integer, default=1)
     receipt: Mapped[str] = mapped_column(String(100), default="")       # chek fayli nomi (UPLOAD_DIR ichida)
     note: Mapped[str] = mapped_column(Text, default="")                 # rad etish sababi
+    comment: Mapped[str] = mapped_column(Text, default="")              # mijozning izohi (chek bo'lmasa majburiy)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     account: Mapped[Account] = relationship()

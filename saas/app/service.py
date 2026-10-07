@@ -3,7 +3,7 @@ import logging
 import time
 from datetime import timedelta
 
-from html import escape
+from html import escape as _escape
 
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,11 @@ from .pbx import PbxClient
 from .security import decrypt
 
 log = logging.getLogger(__name__)
+
+
+def escape(text) -> str:
+    """Telegram HTML uchun: faqat < > & tozalanadi (' va \" ga tegilmaydi)."""
+    return _escape(str(text), quote=False)
 
 # Qo'ng'iroq tugagan zahoti yozuv fayli hali tayyor bo'lmasligi mumkin: shuncha soniya kutib qayta so'raymiz
 RECORD_RETRY_DELAYS = (5, 15, 30, 60)
@@ -147,9 +152,15 @@ def notify_admin_payment(payment_id: int) -> None:
                    f"Mijoz: {escape(p.account.user.email)}\n"
                    f"Tarif: {escape(plan)} × {p.months} oy\n"
                    f"Summa: <b>{amount}</b> so'm")
+        caption += f"\nIzoh: {escape(p.comment)}" if p.comment else ""
+        if not p.receipt:
+            caption += "\n⚠️ Chek yuklanmagan"
         markup = {"inline_keyboard": [[{"text": "✅ Tasdiqlash", "callback_data": f"pay:ok:{p.id}"},
                                        {"text": "❌ Rad etish", "callback_data": f"pay:no:{p.id}"}]]}
         try:
+            if not p.receipt:  # chek yo'q: matnli eslatma (izoh bilan) va o'sha tugmalar
+                telegram.send_message(config.ADMIN_CHAT_ID, caption, markup)
+                return
             data = receipts.path(p.receipt).read_bytes()
             telegram.send_file(config.ADMIN_CHAT_ID, caption, data, p.receipt, receipts.mime(p.receipt), markup)
         except Exception:

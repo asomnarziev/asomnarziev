@@ -161,22 +161,31 @@ def billing(request: Request, error: str | None = None, ok: str | None = None, u
 
 
 @router.post("/billing/checkout")
-async def checkout(bg: BackgroundTasks, plan: str = Form(...), months: int = Form(1), receipt: UploadFile = File(...),
-                   user: User = Depends(require_user), db: Session = Depends(get_db)):
-    """Mijoz kartaga o'tkazgach chekni yuklaydi: to'lov 'pending' bo'ladi, adminga Telegramda eslatma ketadi."""
-    acc = user.account
+async def checkout(bg: BackgroundTasks, plan: str = Form(...), months: int = Form(1), comment: str = Form(""),
+                   receipt: UploadFile | None = File(None), user: User = Depends(require_user),
+                   db: Session = Depends(get_db)):
+    """Mijoz kartaga o'tkazgach chekni yuklaydi. Chek bo'lmasa izoh majburiy. To'lov 'pending', adminga Telegramda eslatma."""
+    from urllib.parse import quote_plus
+
+    def back(error):
+        return go(f"/billing?error={quote_plus(error)}")
+
+    acc, comment = user.account, comment.strip()[:500]
     if plan not in config.PLANS or months not in MONTHS:
         raise HTTPException(400)
-    pending = db.query(Payment).filter_by(account_id=acc.id, status="pending").count()
-    if pending >= config.MAX_PENDING_PAYMENTS:
-        return go("/billing?error=Kutilayotgan+to%27lovlaringiz+ko%27p.+Administrator+tasdiqlashini+kuting")
-    try:
-        name = receipts.save(await receipt.read(config.MAX_RECEIPT_MB * 1024 * 1024 + 1))
-    except receipts.ReceiptError as e:
-        from urllib.parse import quote_plus
-        return go(f"/billing?error={quote_plus(str(e))}")
+    if db.query(Payment).filter_by(account_id=acc.id, status="pending").count() >= config.MAX_PENDING_PAYMENTS:
+        return back("Kutilayotgan to'lovlaringiz ko'p. Administrator tasdiqlashini kuting")
+    data = await receipt.read(config.MAX_RECEIPT_MB * 1024 * 1024 + 1) if receipt is not None and receipt.filename else b""
+    if not data and not comment:
+        return back("Chekni yuklang yoki izohga to'lov haqida yozing (qaysi kartadan, kim, qachon o'tkazgansiz)")
+    name = ""
+    if data:
+        try:
+            name = receipts.save(data)
+        except receipts.ReceiptError as e:
+            return back(str(e))
     p = Payment(account_id=acc.id, plan=plan, months=months, amount=config.PLANS[plan]["price"] * months,
-                provider="card", receipt=name)
+                provider="card", receipt=name, comment=comment)
     db.add(p)
     db.commit()
     bg.add_task(service.notify_admin_payment, p.id)

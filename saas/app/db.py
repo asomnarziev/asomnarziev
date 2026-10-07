@@ -20,7 +20,7 @@ def get_db():
         db.close()
 
 
-_PAYMENT_COLUMNS = {"months": "INTEGER DEFAULT 1", "receipt": "VARCHAR(100) DEFAULT ''", "note": "TEXT DEFAULT ''"}
+_PAYMENT_COLUMNS = {"months": "INTEGER DEFAULT 1", "receipt": "VARCHAR(100) DEFAULT ''", "note": "TEXT DEFAULT ''", "comment": "TEXT DEFAULT ''"}
 
 
 def init_db():

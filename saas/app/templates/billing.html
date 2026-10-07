@@ -23,14 +23,16 @@
 <select name="months">{% for m in months %}<option value="{{ m }}">{{ m }} oy</option>{% endfor %}</select>
 <span class="muted small">summa = oylik narx × oy</span></div>
 <div class="row" style="margin-bottom:12px"><label class="l" style="margin:0">Chek</label>
-<input type="file" name="receipt" accept="image/jpeg,image/png,image/webp,application/pdf" required>
+<input type="file" name="receipt" accept="image/jpeg,image/png,image/webp,application/pdf">
 <span class="muted small">JPG, PNG, WEBP yoki PDF, {{ max_mb }} MB gacha</span></div>
+<div style="margin-bottom:12px"><label class="l">Izoh <span class="muted" style="font-weight:400">(chek bo'lmasa majburiy)</span></label>
+<textarea name="comment" rows="2" maxlength="500" placeholder="Masalan: Click orqali 8600 **** 1234 kartadan, Ali V., soat 14:20 da o'tkazdim" style="width:100%"></textarea></div>
 <button>{{ i("send",14) }}Chekni yuborish</button></form></div>
 
 <div class="card"><div class="ch"><span class="ico">{{ i("clock") }}</span>To'lovlar tarixi</div><div class="scroll" style="margin-top:10px"><table class="tbl">
 <thead><tr><th>Sana (UTC)</th><th>Tarif</th><th>Summa</th><th>Holat</th></tr></thead><tbody>
 {% for p in history %}<tr><td>{{ p.created_at.strftime("%d.%m.%Y %H:%M") }}</td><td><span class="badge">{{ plans[p.plan].name }}</span> × {{ p.months }} oy</td>
 <td>{{ "{:,}".format(p.amount).replace(",", " ") if p.amount else "—" }}</td>
-<td>{% if p.status=="paid" %}<span class="badge ok">tasdiqlandi</span>{% elif p.status=="rejected" %}<span class="badge err">rad etildi</span>{% if p.note %} <span class="muted small">{{ p.note }}</span>{% endif %}{% else %}<span class="badge warn">tekshirilmoqda</span>{% endif %}</td></tr>
+<td>{% if p.comment %}<div class="muted small" style="margin-bottom:4px">«{{ p.comment }}»</div>{% endif %}{% if p.status=="paid" %}<span class="badge ok">tasdiqlandi</span>{% elif p.status=="rejected" %}<span class="badge err">rad etildi</span>{% if p.note %} <span class="muted small">{{ p.note }}</span>{% endif %}{% else %}<span class="badge warn">tekshirilmoqda</span>{% endif %}</td></tr>
 {% else %}<tr><td colspan="4" class="empty">Hali to'lov yo'q</td></tr>{% endfor %}</tbody></table></div></div>
 {% endblock %}

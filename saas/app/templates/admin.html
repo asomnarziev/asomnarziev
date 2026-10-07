@@ -18,6 +18,8 @@
  <div><span class="badge">{{ plans[p.plan].name }}</span> <span class="muted">× {{ p.months }} oy</span></div>
  <div><b style="font:700 1.05rem var(--mono)">{{ "{:,}".format(amount(p)).replace(",", " ") }}</b> <span class="muted">so'm</span></div>
  <div>{% if p.receipt %}<a href="/receipt/{{ p.id }}" target="_blank" rel="noopener">{{ i("link",14) }} Chekni ko'rish</a>{% else %}<span class="muted">chek yo'q</span>{% endif %}</div></div>
+ {% if p.comment %}<p class="small" style="margin:10px 0 0"><span class="muted">Izoh:</span> {{ p.comment }}</p>{% endif %}
+ {% if not p.receipt %}<p style="margin:6px 0 0"><span class="badge warn">chek yuklanmagan</span></p>{% endif %}
  <div class="acts">
   <form method="post" action="/admin/payment/{{ p.id }}/confirm"><button class="sm">{{ i("check",14) }}Tasdiqlash</button></form>
   <form method="post" action="/admin/payment/{{ p.id }}/reject" class="row" style="flex-wrap:nowrap"><input class="sm" name="note" placeholder="Rad etish sababi (ixtiyoriy)" size="26"><button class="danger sm">Rad etish</button></form>

@@ -531,3 +531,45 @@ def test_card_number_with_spaces_in_env(client, monkeypatch):
     register(client, "k@x.uz")
     page = client.get("/billing").text
     assert "8600 1234 5678 9012" in page and 'data-copy="8600123456789012"' in page
+
+
+def test_no_receipt_requires_comment(client, pay):
+    from urllib.parse import unquote_plus
+    from app.models import Payment
+    register(client, "c@x.uz")
+    # brauzer chek tanlanmasa bo'sh fayl qismi yuboradi
+    empty = {"receipt": ("", b"", "application/octet-stream")}
+    r = client.post("/billing/checkout", data={"plan": "start", "months": "1", "comment": "   "}, files=empty, follow_redirects=False)
+    assert r.status_code == 303 and "izohga" in unquote_plus(r.headers["location"])
+    r = client.post("/billing/checkout", data={"plan": "start", "months": "1"}, follow_redirects=False)  # umuman fayl qismi yo'q
+    assert "izohga" in unquote_plus(r.headers["location"])
+    with SessionLocal() as db:
+        assert db.query(Payment).count() == 0 and pay == []
+
+
+def test_comment_only_payment_notifies_admin_with_buttons(client, pay):
+    from app.models import Payment
+    register(client, "c@x.uz")
+    r = client.post("/billing/checkout", data={"plan": "pro", "months": "1", "comment": "Click orqali o'tkazdim <b>Ali</b>"},
+                    files={"receipt": ("", b"", "application/octet-stream")}, follow_redirects=False)
+    assert "ok=1" in r.headers["location"]
+    with SessionLocal() as db:
+        p = db.query(Payment).one()
+        assert p.receipt == "" and p.status == "pending" and "Click" in p.comment
+    chat, text, mime, markup = pay[0]
+    assert chat == "555" and mime is None  # matnli xabar
+    assert "Izoh: Click orqali o'tkazdim &lt;b&gt;Ali&lt;/b&gt;" in text and "Chek yuklanmagan" in text  # HTML tozalangan
+    assert markup["inline_keyboard"][0][0]["callback_data"] == "pay:ok:1"
+    admin = TestClient(app); register(admin, "admin@x.uz")
+    page = admin.get("/admin").text
+    assert "Click orqali" in page and "chek yuklanmagan" in page and "/receipt/1" not in page
+    assert admin.get("/receipt/1").status_code == 404  # fayl yo'q
+
+
+def test_receipt_with_comment_and_comment_shown_to_customer(client, pay):
+    register(client, "c@x.uz")
+    r = client.post("/billing/checkout", data={"plan": "start", "months": "1", "comment": "to'lov 14:20"},
+                    files={"receipt": ("chek.png", PNG, "image/png")}, follow_redirects=False)
+    assert "ok=1" in r.headers["location"]
+    assert pay[0][2] == "image/png" and "Izoh: to'lov 14:20" in pay[0][1]
+    assert "to'lov 14:20" in client.get("/billing").text.replace("&#39;", "'")
