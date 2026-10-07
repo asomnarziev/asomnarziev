@@ -20,9 +20,15 @@ def client():
 
 
 def register(c, email="a@x.uz"):
-    from app import config
-    config.OPEN_REGISTRATION = True
-    return c.post("/register", data={"email": email, "password": "12345678"}, follow_redirects=False)
+    """Ro'yxatdan o'tish sahifasi yo'q: foydalanuvchi bazada yaratiladi va tizimga kiriladi."""
+    from app.models import Account, User
+    from app.security import hash_password
+    with SessionLocal() as db:
+        u = User(email=email, password_hash=hash_password("12345678"), is_admin=(email == "admin@x.uz"))
+        u.account = Account()
+        db.add(u)
+        db.commit()
+    return c.post("/login", data={"email": email, "password": "12345678"}, follow_redirects=False)
 
 
 def test_register_cabinet_and_isolation(client):
@@ -141,13 +147,12 @@ def test_each_tenant_has_own_hook_and_regenerate(client):
     assert client.post(f"/hook/{h1}", data={"uuid": "x"}).status_code == 404
 
 
-def test_admin_creates_customer_and_registration_closed(client, monkeypatch):
-    from app import config
-    monkeypatch.setattr(config, "OPEN_REGISTRATION", True)
-    register(client, "admin@x.uz")  # ADMIN_EMAIL
-    monkeypatch.setattr(config, "OPEN_REGISTRATION", False)
-    assert "yopiq" in TestClient(app).get("/register").text
-    assert TestClient(app).post("/register", data={"email": "z@x.uz", "password": "12345678"}).status_code == 403
+def test_admin_creates_customer_and_no_registration(client):
+    register(client, "admin@x.uz")
+    anon = TestClient(app)
+    assert anon.get("/register").status_code == 404
+    assert anon.post("/register", data={"email": "z@x.uz", "password": "12345678"}).status_code in (404, 405)
+    assert "Ro'yxatdan" not in anon.get("/login").text
     r = client.post("/admin/user", data={"email": "cust@x.uz", "password": "parol12345"})
     assert "parol12345" in r.text
     cust = TestClient(app)
@@ -212,3 +217,15 @@ def test_local_time_and_audio_name():
     assert "07.10.2026 12:30:24" in render_call("uz", call)
     assert audio_name(call) == "105_935033635_07.10_12-30.mp3"
     assert audio_name({"uuid": "x/../y"}) == "x..y.mp3" or audio_name({"uuid": "x/../y"}).endswith(".mp3")
+
+
+def test_create_user_cli(client, capsys):
+    from app import create_user
+    from app.models import User
+    create_user.main(["boss@x.uz", "12345678", "--admin"])
+    create_user.main(["boss@x.uz", "yangiparol1"])  # mavjud: parolni yangilaydi, adminligini saqlaydi
+    with SessionLocal() as db:
+        u = db.query(User).filter_by(email="boss@x.uz").one()
+        assert u.is_admin and u.account is not None
+    c = TestClient(app)
+    assert c.post("/login", data={"email": "boss@x.uz", "password": "yangiparol1"}, follow_redirects=False).headers["location"] == "/cabinet"

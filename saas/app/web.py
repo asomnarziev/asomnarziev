@@ -45,30 +45,6 @@ def index(user: User | None = Depends(current_user)):
     return go("/cabinet" if user else "/login")
 
 
-@router.get("/register")
-def register_form(request: Request):
-    if not config.OPEN_REGISTRATION:
-        return render(request, "auth.html", mode="closed", error=None)
-    return render(request, "auth.html", mode="register", error=None)
-
-
-@router.post("/register")
-def register(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    if not config.OPEN_REGISTRATION:
-        raise HTTPException(403, "Ro'yxatdan o'tish yopiq")
-    email = email.strip().lower()
-    if len(password) < 8:
-        return render(request, "auth.html", mode="register", error="Parol kamida 8 belgi")
-    if db.query(User).filter_by(email=email).first():
-        return render(request, "auth.html", mode="register", error="Bu email band")
-    user = User(email=email, password_hash=hash_password(password), is_admin=(email == config.ADMIN_EMAIL))
-    user.account = Account()
-    db.add(user)
-    db.commit()
-    request.session["uid"] = user.id
-    return go("/cabinet")
-
-
 @router.get("/login")
 def login_form(request: Request):
     return render(request, "auth.html", mode="login", error=None)
