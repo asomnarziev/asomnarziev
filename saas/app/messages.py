@@ -6,16 +6,11 @@ DEFAULT_LANG = "uz"
 TEMPLATES = {
     "uz": {
         "call": (
-            "📞 <b>Qo'ng'iroq yozuvi</b>
-"
-            "Yo'nalish: {direction}
-"
-            "Kimdan: <code>{caller}</code>
-"
-            "Kimga: <code>{callee}</code>
-"
-            "Sana: {date}
-"
+            "📞 <b>Qo'ng'iroq yozuvi</b>\n"
+            "Yo'nalish: {direction}\n"
+            "Kimdan: <code>{caller}</code>\n"
+            "Kimga: <code>{callee}</code>\n"
+            "Sana: {date}\n"
             "Davomiyligi: {duration}"
         ),
         "direction": {"inbound": "⬇️ Kiruvchi", "outbound": "⬆️ Chiquvchi", "local": "🔁 Ichki"},
@@ -29,16 +24,11 @@ TEMPLATES = {
     },
     "ru": {
         "call": (
-            "📞 <b>Запись звонка</b>
-"
-            "Направление: {direction}
-"
-            "От: <code>{caller}</code>
-"
-            "Кому: <code>{callee}</code>
-"
-            "Дата: {date}
-"
+            "📞 <b>Запись звонка</b>\n"
+            "Направление: {direction}\n"
+            "От: <code>{caller}</code>\n"
+            "Кому: <code>{callee}</code>\n"
+            "Дата: {date}\n"
             "Длительность: {duration}"
         ),
         "direction": {"inbound": "⬇️ Входящий", "outbound": "⬆️ Исходящий", "local": "🔁 Внутренний"},
