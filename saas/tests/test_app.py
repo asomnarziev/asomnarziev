@@ -922,8 +922,8 @@ def test_missed_alert_toggle_requires_pro(client):
 # ---------- Pro: qo'ng'iroqlarni qidirish va yozuvni qayta olish ----------
 @pytest.fixture()
 def calls_env(client, monkeypatch):
-    from app import web
-    web._fetches.clear()
+    from app.web import calls as calls_web
+    calls_web._fetches.clear()
     admin = client; register(admin, "admin@x.uz")
     cust = TestClient(app); register(cust, "c@x.uz")
     cust.post("/cabinet/pbx", data={"domain": "d.onpbx.ru", "key": "k"})
@@ -976,7 +976,7 @@ def test_calls_pagination_and_isolation(calls_env):
 
 
 def test_call_record_proxy_and_hourly_cap(calls_env, monkeypatch):
-    from app import web
+    from app.web import calls as web
     from app.pbx import PbxError
     _, cust = calls_env
     mode = {"v": b"mp3data"}
@@ -1001,7 +1001,7 @@ def test_call_record_proxy_and_hourly_cap(calls_env, monkeypatch):
 
 
 def test_call_resend_to_telegram(calls_env, monkeypatch):
-    from app import web
+    from app.web import calls as web
     _, cust = calls_env
     cust.post("/cabinet/chat", data={"chat_id": "1", "lang": "uz"})
     cust.post("/cabinet/chat", data={"chat_id": "2", "lang": "ru"})

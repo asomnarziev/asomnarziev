@@ -2,16 +2,15 @@
 import logging
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from datetime import time as dtime
-
 from html import escape as _escape
 
 from sqlalchemy.orm import Session
 
 from . import config, live, receipts, telegram
-from .messages import DEFAULT_LANG, LANGS, LOCAL_TZ, TEMPLATES, audio_name, render_call, render_missed
 from .db import SessionLocal
+from .messages import DEFAULT_LANG, LANGS, LOCAL_TZ, TEMPLATES, audio_name, render_call, render_missed
 from .models import Account, CallLog, Chat, Payment, now
 from .pbx import PbxClient, PbxError
 from .security import decrypt
@@ -49,7 +48,7 @@ def store_call_stats(row: CallLog, call: dict) -> None:
     row.caller = str(call.get("caller_id_number") or "")[:40]
     row.callee = str(call.get("destination_number") or "")[:40]
     ts = num(call.get("start_stamp"))
-    row.started_at = datetime.fromtimestamp(ts, timezone.utc).replace(tzinfo=None) if ts else now()
+    row.started_at = datetime.fromtimestamp(ts, UTC).replace(tzinfo=None) if ts else now()
     row.duration = num(call.get("duration")) or 0
     row.talk = num(call.get("user_talk_time"))
 
@@ -117,22 +116,22 @@ def handle_update(db: Session, u: dict) -> None:
         return handle_payment_callback(db, u["callback_query"])
     msg = u.get("message") or u.get("channel_post")
     if not (msg and msg.get("text", "").startswith("/")):
-        return
+        return None
     chat_id = str(msg["chat"]["id"])
     cmd, _, arg = msg["text"].partition(" ")
     if cmd.split("@")[0] == "/id":
         telegram.send_message(chat_id, f"Chat ID: <code>{chat_id}</code>")
-        return
+        return None
     if cmd.split("@")[0] != "/start" or not arg.strip():
-        return
+        return None
     acc = db.query(Account).filter_by(link_code=arg.strip()).first()
     if not acc:
         telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["bad_code"])
-        return
+        return None
     if not any(c.chat_id == chat_id for c in acc.chats):
         if len(acc.chats) >= acc.max_chats:
             telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["limit"])
-            return
+            return None
         db.add(Chat(account_id=acc.id, chat_id=chat_id, lang=DEFAULT_LANG))
         db.commit()
     telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["linked"])

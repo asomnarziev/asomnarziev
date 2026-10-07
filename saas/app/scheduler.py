@@ -5,7 +5,7 @@ Bitta jarayonda ishlaydi (bitta uvicorn worker). Takror yuborilmaydi: har akkaun
 """
 import logging
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -35,7 +35,7 @@ def send_digest(db: Session, acc: Account, day, test: bool = False) -> int:
 
 def run_due(db: Session, now_utc: datetime | None = None) -> int:
     """Vaqti kelgan akkauntlarga kechagi hisobotni yuboradi. Yuborilgan (yoki o'tkazib yuborilgan) akkauntlar soni."""
-    now_utc = now_utc or datetime.now(timezone.utc)
+    now_utc = now_utc or datetime.now(UTC)
     local_now = now_utc.astimezone(LOCAL_TZ)
     yesterday = local_now.date() - timedelta(days=1)
     done = 0

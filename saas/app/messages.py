@@ -68,8 +68,8 @@ def fmt_duration(seconds: int) -> str:
 
 
 import os
-from html import escape
 from datetime import datetime, timedelta, timezone
+from html import escape
 
 # Server UTC'da ishlaydi; xabarlarda mijozning mahalliy vaqti ko'rsatiladi (Toshkent = UTC+5)
 LOCAL_TZ = timezone(timedelta(hours=float(os.environ.get("TZ_OFFSET_HOURS", "5"))))

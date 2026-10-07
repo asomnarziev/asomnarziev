@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -9,7 +9,7 @@ from .db import Base
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)  # UTC, naive
+    return datetime.now(UTC).replace(tzinfo=None)  # UTC, naive
 
 
 def token() -> str:

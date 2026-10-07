@@ -2,7 +2,7 @@
 import csv
 import io
 from collections import Counter, defaultdict
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from html import escape
 
 from sqlalchemy.orm import Session
@@ -36,7 +36,7 @@ def parse_period(period: str | None, frm: str | None, to: str | None) -> tuple[d
 def utc_bounds(start: date, end: date) -> tuple[datetime, datetime]:
     """Mahalliy [start, end] kunlarni UTC (naive) yarim ochiq oraliqqa aylantiradi."""
     def conv(d: date) -> datetime:
-        return datetime.combine(d, time(0), LOCAL_TZ).astimezone(timezone.utc).replace(tzinfo=None)
+        return datetime.combine(d, time(0), LOCAL_TZ).astimezone(UTC).replace(tzinfo=None)
     return conv(start), conv(end + timedelta(days=1))
 
 
@@ -48,7 +48,7 @@ def load(db: Session, account_id: int, start: date, end: date, limit: int | None
 
 
 def local(dt: datetime) -> datetime:
-    return dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
+    return dt.replace(tzinfo=UTC).astimezone(LOCAL_TZ)
 
 
 def is_internal(n: str) -> bool:

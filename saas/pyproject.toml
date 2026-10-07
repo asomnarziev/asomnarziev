@@ -1,0 +1,25 @@
+[project]
+name = "pbx-telegram"
+version = "1.0.0"
+description = "OnlinePBX qo'ng'iroq yozuvlarini Telegramga yuboruvchi ko'p mijozli (SaaS) xizmat"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+extend-exclude = ["uploads", "venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "C4", "SIM", "RET", "PIE"]
+ignore = [
+    "B008",   # FastAPI: Depends()/Form() argument default'larida chaqiriladi (framework uslubi)
+    "RET504", # o'zgaruvchiga yozib qaytarish ba'zan o'qishni osonlashtiradi
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106", "S108", "B011", "E702", "E701", "SIM117", "RET"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`:DeprecationWarning"]
