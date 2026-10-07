@@ -171,3 +171,25 @@ def test_record_retried_until_ready(monkeypatch):
     monkeypatch.setattr(service.time, "sleep", sleeps.append)
     assert service.fetch_record(Pbx(), "u") == b"mp3"
     assert len(calls) == 3 and sleeps == [5, 15]
+
+
+def test_pbx_client_requires_config_and_tries_hosts(monkeypatch):
+    from app import pbx
+    import pytest as _p
+    with _p.raises(pbx.PbxError, match="domeni"):
+        pbx.PbxClient("", "k")
+    with _p.raises(pbx.PbxError, match="kaliti"):
+        pbx.PbxClient("d.onpbx.ru", "")
+    urls = []
+
+    class R:
+        def __init__(self, ok): self.ok = ok
+        def raise_for_status(self):
+            if not self.ok: raise pbx.requests.HTTPError("404")
+        def json(self): return {"status": "1", "data": {"key_id": "a", "key": "b"}}
+
+    c = pbx.PbxClient("https://d.onpbx.ru/", "k")
+    assert c.domain == "d.onpbx.ru"
+    monkeypatch.setattr(c.s, "post", lambda url, **kw: (urls.append(url), R(len(urls) > 1))[1])
+    c._auth()
+    assert urls[0].startswith("https://api.onlinepbx.ru/d.onpbx.ru/") and c.base.startswith("https://api2.")

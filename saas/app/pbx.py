@@ -1,19 +1,44 @@
 """OnlinePBX API mijozi (har mijozning o'z domeni va kaliti bilan)."""
+import os
+
 import requests
+
+# API xosti bir nechta bo'lishi mumkin; auth muvaffaqiyatli bo'lgani eslab qolinadi
+HOSTS = [h.strip() for h in os.environ.get("PBX_API_HOSTS", "api.onlinepbx.ru,api2.onlinepbx.ru").split(",") if h.strip()]
+
+
+class PbxError(Exception):
+    pass
 
 
 class PbxClient:
     def __init__(self, domain: str, auth_key: str):
-        self.base = f"https://api.onlinepbx.ru/{domain}"
-        self.auth_key = auth_key
+        domain = (domain or "").strip().removeprefix("https://").removeprefix("http://").strip("/")
+        if not domain:
+            raise PbxError("OnlinePBX domeni kabinetda kiritilmagan")
+        if not auth_key:
+            raise PbxError("OnlinePBX API kaliti kabinetda kiritilmagan")
+        self.domain, self.auth_key = domain, auth_key
         self.s = requests.Session()
+        self.base = None
         self.key = None
 
     def _auth(self):
-        r = self.s.post(f"{self.base}/auth.json", data={"auth_key": self.auth_key, "new": "true"}, timeout=30)
-        r.raise_for_status()
-        d = r.json()["data"]
-        self.key = f"{d['key_id']}:{d['key']}"
+        errors = []
+        for host in HOSTS:
+            base = f"https://{host}/{self.domain}"
+            try:
+                r = self.s.post(f"{base}/auth.json", data={"auth_key": self.auth_key, "new": "true"}, timeout=30)
+                r.raise_for_status()
+                body = r.json()
+                if str(body.get("status")) not in ("1", "True", "true") and "data" not in body:
+                    raise PbxError(f"auth rad etildi: {str(body)[:200]}")
+                d = body["data"]
+                self.base, self.key = base, f"{d['key_id']}:{d['key']}"
+                return
+            except (requests.RequestException, ValueError, KeyError, PbxError) as e:
+                errors.append(f"{host}: {e}")
+        raise PbxError("OnlinePBX'ga ulanib bo'lmadi (domen yoki API kalitni tekshiring): " + " | ".join(errors))
 
     def _post(self, path: str, data: dict) -> dict:
         if not self.key:
