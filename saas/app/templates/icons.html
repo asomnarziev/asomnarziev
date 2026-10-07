@@ -1,0 +1,16 @@
+{% macro i(name, size=18) -%}
+<svg class="ic" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if name=="home" %}<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>
+{%- elif name=="card" %}<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
+{%- elif name=="shield" %}<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>
+{%- elif name=="phone" %}<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/>
+{%- elif name=="send" %}<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>
+{%- elif name=="clock" %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+{%- elif name=="users" %}<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M17 4a4 4 0 010 8M22 21c0-3-2-5-5-5.7"/>
+{%- elif name=="check" %}<path d="M5 12l5 5 9-10"/>
+{%- elif name=="link" %}<path d="M10 14a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1"/><path d="M14 10a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1"/>
+{%- elif name=="copy" %}<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/>
+{%- elif name=="out" %}<path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>
+{%- elif name=="key" %}<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/>
+{%- endif -%}</svg>
+{%- endmacro %}

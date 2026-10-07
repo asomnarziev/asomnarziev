@@ -1,50 +1,61 @@
-{% extends "base.html" %}{% set active="cabinet" %}{% block body %}
-<h1>Kabinet</h1>
-<div class="card stat">
-<div><span class="muted">Obuna</span><b>{% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</b></div>
-<div><span class="muted">Amal qiladi</span><b>{{ acc.valid_until.strftime("%d.%m.%Y") }}</b></div>
-<div><span class="muted">Chatlar</span><b>{{ acc.chats|length }} / {{ acc.max_chats }}</b></div>
-<div><span class="muted">&nbsp;</span><a class="btn" href="/billing" style="display:inline-block;margin-top:2px">Tarifni ko'rish</a></div>
+{% extends "base.html" %}{% from "icons.html" import i %}{% set active="cabinet" %}{% block body %}
+{% set pbx_ok = acc.pbx_domain and acc.pbx_key_enc %}{% set chat_ok = acc.chats|length > 0 %}{% set hook_ok = acc.logs|length > 0 %}
+{% set done = (1 if pbx_ok else 0) + (1 if chat_ok else 0) + (1 if hook_ok else 0) %}
+<div class="head"><div><h1>Kabinet</h1><p>OnlinePBX yozuvlarini Telegramga yuborishni sozlang</p></div></div>
+
+<div class="stats">
+ <div class="stat"><div class="ico">{{ i("shield") }}</div><div><small>Obuna</small><b>{% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</b></div></div>
+ <div class="stat"><div class="ico">{{ i("clock") }}</div><div><small>Amal qiladi</small><b>{{ acc.valid_until.strftime("%d.%m.%Y") }}</b></div></div>
+ <div class="stat"><div class="ico">{{ i("users") }}</div><div><small>Chatlar</small><b>{{ acc.chats|length }} / {{ acc.max_chats }}</b></div></div>
 </div>
 
-<div class="card"><h3><span class="n">1</span>OnlinePBX</h3>
+{% if done < 3 %}<div class="card"><h3>Sozlash bosqichlari <span class="muted small" style="font-weight:500">{{ done }}/3</span></h3>
+ <div class="prog"><div style="width:{{ (done*100/3)|round|int }}%"></div></div>
+ <div class="steps">
+  <div class="step {{ 'done' if pbx_ok }}"><div class="dot">{{ i("check",12) if pbx_ok else "1" }}</div><div><b>OnlinePBX ulash</b><span>Domen va API kalit</span></div></div>
+  <div class="step {{ 'done' if chat_ok }}"><div class="dot">{{ i("check",12) if chat_ok else "2" }}</div><div><b>Telegram chat</b><span>Botni chatga ulash</span></div></div>
+  <div class="step {{ 'done' if hook_ok }}"><div class="dot">{{ i("check",12) if hook_ok else "3" }}</div><div><b>Webhook</b><span>OnlinePBX'ga manzilni kiriting</span></div></div>
+ </div></div>{% endif %}
+
+<div class="card"><div class="ch"><span class="ico">{{ i("phone") }}</span>OnlinePBX</div>
+<p class="sub">Stansiya ma'lumotlari. API kalit shifrlangan holda saqlanadi.</p>
 <form method="post" action="/cabinet/pbx" class="row grow">
 <input name="domain" value="{{ acc.pbx_domain }}" placeholder="company.onpbx.ru" required>
 <input name="key" type="password" placeholder="{{ 'API kalit saqlangan (o‘zgartirish uchun kiriting)' if acc.pbx_key_enc else 'API kalit' }}">
 <button>Saqlash</button></form>
-<h4>Webhook manzilingiz</h4>
-<div class="copy"><code id="hook">{{ hook_url }}</code>
-<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('hook').innerText);this.textContent='Nusxalandi ✓'">Nusxalash</button></div>
-<p class="muted">OnlinePBX → Sozlamalar → Integratsiya → Webhook'larda yangi webhook qo'shib, shu manzilni kiriting
+<h4 style="margin:18px 0 6px;font-size:.95rem">Webhook manzilingiz</h4>
+<div class="code"><code id="hook">{{ hook_url }}</code><button type="button" onclick="copyText('hook')">{{ i("copy",14) }}Nusxalash</button></div>
+<p class="muted small" style="margin:8px 0 12px">OnlinePBX → Sozlamalar → Integratsiya → Webhook'larda yangi webhook qo'shib, shu manzilni kiriting
 (hodisa: qo'ng'iroq tugashi / yozuv tayyor bo'lishi; usul: POST). Manzil faqat sizniki — hech kimga bermang.</p>
 <div class="row"><span class="muted">Oxirgi webhook:</span>
-{% if acc.logs %}{{ acc.logs[0].created_at.strftime("%d.%m.%Y %H:%M") }} UTC
+{% if acc.logs %}<b>{{ acc.logs[0].created_at.strftime("%d.%m.%Y %H:%M") }} UTC</b>
 <span class="badge {{ 'ok' if acc.logs[0].status=='sent' else ('err' if acc.logs[0].status=='error' else 'warn') }}">{{ acc.logs[0].status }}</span>
 {% else %}<span class="badge warn">hali kelmagan</span>{% endif %}
 <form method="post" action="/cabinet/hook/regenerate" onsubmit="return confirm('Eski manzil ishlamay qoladi. Davom etasizmi?')" style="margin-left:auto"><button class="ghost sm">Manzilni qayta yaratish</button></form></div>
 </div>
 
-<div class="card"><h3><span class="n">2</span>Telegram chatlar</h3>
-<p>Botni chatga ulash: <a href="{{ tg_link }}">{{ tg_link }}</a></p>
-<p class="muted"><b>Guruh:</b> botni guruhga qo'shib, <code>/start@{{ config.BOT_USERNAME }} {{ acc.link_code }}</code> yuboring.<br>
-<b>Kanal:</b> botni kanalga <b>administrator</b> (xabar yuborish huquqi bilan) qilib qo'shing va kanalda shu buyruqni yozing, yoki kanal ID (<code>-100...</code>) / <code>@kanal</code> ni qo'lda kiriting.<br>
-Har chat uchun xabar tilini shu yerda tanlang.</p>
-<div class="scroll"><table class="tbl">
+<div class="card"><div class="ch"><span class="ico">{{ i("send") }}</span>Telegram chatlar</div>
+<p class="sub">Shaxsiy chat, guruh yoki kanal. Har chat uchun xabar tilini tanlang.</p>
+<div class="code"><code id="tglink">{{ tg_link }}</code><button type="button" onclick="copyText('tglink')">{{ i("copy",14) }}Nusxalash</button></div>
+<p class="muted small" style="margin:8px 0 14px"><b>Guruh:</b> botni guruhga qo'shib, <code>/start@{{ config.BOT_USERNAME }} {{ acc.link_code }}</code> yuboring.
+<b>Kanal:</b> botni kanalga <b>administrator</b> (xabar yuborish huquqi bilan) qilib qo'shing va shu buyruqni yozing, yoki kanal ID (<code>-100…</code>) / <code>@kanal</code> ni qo'lda kiriting.</p>
+<div class="scroll"><table class="tbl"><tbody>
 {% for c in acc.chats %}<tr><td><code>{{ c.chat_id }}</code></td>
 <td><form method="post" action="/cabinet/chat/{{ c.id }}/lang"><select class="sm" name="lang" onchange="this.form.submit()">
 {% for k,v in langs.items() %}<option value="{{ k }}" {{ "selected" if k==c.lang }}>{{ v }}</option>{% endfor %}</select></form></td>
 <td style="text-align:right"><form method="post" action="/cabinet/chat/{{ c.id }}/delete"><button class="danger sm">O'chirish</button></form></td></tr>
-{% else %}<tr><td class="empty">Hali chat ulanmagan</td></tr>{% endfor %}</table></div>
-<div class="row" style="margin-top:12px">
+{% else %}<tr><td class="empty" colspan="3">{{ i("send",26) }}Hali chat ulanmagan — yuqoridagi havoladan foydalaning</td></tr>{% endfor %}</tbody></table></div>
+<div class="row" style="margin-top:14px">
 <form method="post" action="/cabinet/chat" class="row grow" style="flex:1"><input name="chat_id" placeholder="Chat ID yoki @kanal" required>
 <select name="lang">{% for k,v in langs.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select><button class="ghost">Qo'lda qo'shish</button></form>
-<form method="post" action="/cabinet/test"><button>Sinov xabari</button></form></div>
+<form method="post" action="/cabinet/test"><button>{{ i("send",14) }}Sinov xabari</button></form></div>
 </div>
 
-<div class="card"><h3><span class="n">3</span>So'nggi qo'ng'iroqlar</h3>
-<div class="scroll"><table class="tbl"><tr><th>Vaqt (UTC)</th><th>Holat</th><th class="hide-sm">Izoh</th></tr>
-{% for l in acc.logs[:20] %}<tr><td>{{ l.created_at.strftime("%d.%m %H:%M") }}</td>
+<div class="card"><div class="ch"><span class="ico">{{ i("clock") }}</span>So'nggi qo'ng'iroqlar</div>
+<p class="sub">Webhook orqali kelgan oxirgi 20 ta hodisa</p>
+<div class="scroll"><table class="tbl"><thead><tr><th>Vaqt (UTC)</th><th>ID</th><th>Holat</th><th class="hide-sm">Izoh</th></tr></thead><tbody>
+{% for l in acc.logs[:20] %}<tr><td>{{ l.created_at.strftime("%d.%m %H:%M") }}</td><td><code>{{ l.uuid[:8] }}</code></td>
 <td><span class="badge {{ 'ok' if l.status=='sent' else ('err' if l.status=='error' else 'warn') }}">{{ l.status }}</span></td>
 <td class="muted hide-sm">{{ l.error }}</td></tr>
-{% else %}<tr><td colspan="3" class="empty">Hali qo'ng'iroq kelmagan</td></tr>{% endfor %}</table></div></div>
+{% else %}<tr><td colspan="4" class="empty">{{ i("phone",26) }}Hali qo'ng'iroq kelmagan</td></tr>{% endfor %}</tbody></table></div></div>
 {% endblock %}

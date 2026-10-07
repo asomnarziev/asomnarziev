@@ -1,12 +1,13 @@
-{% extends "base.html" %}{% set active="billing" %}{% block body %}
-<h1>Tarif</h1>
-<div class="card"><span class="muted">Amal qilish muddati:</span> <b>{{ acc.valid_until.strftime("%d.%m.%Y") }}</b>
-{% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</div>
+{% extends "base.html" %}{% from "icons.html" import i %}{% set active="billing" %}{% block body %}
+<div class="head"><div><h1>Tarif</h1><p>Obunangiz va mavjud tariflar</p></div>
+<div class="row"><span class="muted">Amal qiladi:</span><b>{{ acc.valid_until.strftime("%d.%m.%Y") }}</b>
+{% if acc.active %}<span class="badge ok">Faol</span>{% else %}<span class="badge err">Tugagan</span>{% endif %}</div></div>
 <div class="plans">
-{% for k,p in plans.items() %}<div class="card plan"><h3>{{ p.name }}</h3>
+{% for k,p in plans.items() %}<div class="card plan {{ 'pop' if k=='pro' }}">{% if k=='pro' %}<span class="tag">Mashhur</span>{% endif %}
+<h3 style="margin:0">{{ p.name }}</h3>
 <div class="price">{{ "{:,}".format(p.price).replace(",", " ") }} <small>so'm / {{ p.days }} kun</small></div>
-<ul><li>{{ p.max_chats }} tagacha chat</li><li>O'zbekcha va ruscha shablonlar</li><li>Cheksiz qo'ng'iroq yozuvlari</li></ul>
-<form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="{{ k }}"><button style="width:100%">To'lov so'rovi yuborish</button></form></div>{% endfor %}
+<ul><li>{{ i("check") }}{{ p.max_chats }} tagacha chat</li><li>{{ i("check") }}O'zbekcha va ruscha shablonlar</li><li>{{ i("check") }}Cheksiz qo'ng'iroq yozuvlari</li></ul>
+<form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="{{ k }}"><button class="{{ '' if k=='pro' else 'ghost' }}" style="width:100%">To'lov so'rovi yuborish</button></form></div>{% endfor %}
 </div>
-<p class="muted">To'lov so'rovi yuborilgach administrator to'lovni tasdiqlaydi va obuna faollashadi.</p>
+<p class="muted small">To'lov so'rovi yuborilgach administrator to'lovni tasdiqlaydi va obuna faollashadi.</p>
 {% endblock %}
