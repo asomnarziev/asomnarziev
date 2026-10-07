@@ -125,3 +125,15 @@ def test_expired_skips_and_payment_extends(client, monkeypatch):
         db.add(p); db.commit()
         service.confirm_payment(db, p)
         assert acc.active and acc.max_chats == 20
+
+
+def test_each_tenant_has_own_hook_and_regenerate(client):
+    register(client)
+    other = TestClient(app)
+    register(other, "b@x.uz")
+    h1, h2 = (c.get("/cabinet").text.split("/hook/")[1].split("<")[0] for c in (client, other))
+    assert h1 != h2 and len(h1) > 20
+    assert "http://t/hook/" in client.get("/cabinet").text
+    client.post("/cabinet/hook/regenerate")
+    assert h1 not in client.get("/cabinet").text
+    assert client.post(f"/hook/{h1}", data={"uuid": "x"}).status_code == 404

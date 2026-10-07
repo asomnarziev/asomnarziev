@@ -7,8 +7,14 @@
 <p><input name="domain" value="{{ acc.pbx_domain }}" placeholder="company.onpbx.ru" required></p>
 <p><input name="key" type="password" placeholder="{{ 'API kalit saqlangan (o‘zgartirish uchun kiriting)' if acc.pbx_key_enc else 'API kalit' }}"></p>
 <button>Saqlash</button></form>
-<p class="muted">OnlinePBX panelida webhook manzili sifatida quyidagini kiriting:</p>
-<code>{{ hook_url }}</code></section>
+<h4>Webhook manzilingiz</h4>
+<p><code id="hook">{{ hook_url }}</code>
+<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('hook').innerText);this.textContent='Nusxalandi ✓'">Nusxalash</button></p>
+<p class="muted">OnlinePBX → Sozlamalar → Integratsiya → Webhook'larda yangi webhook qo'shib, shu manzilni kiriting
+(hodisa: qo'ng'iroq tugashi / yozuv tayyor bo'lishi; usul: POST). Manzil faqat sizniki — hech kimga bermang.</p>
+<p>Oxirgi webhook: {% if acc.logs %}{{ acc.logs[0].created_at.strftime("%d.%m.%Y %H:%M") }} UTC ({{ acc.logs[0].status }}){% else %}hali kelmagan{% endif %}</p>
+<form method="post" action="/cabinet/hook/regenerate" onsubmit="return confirm('Eski manzil ishlamay qoladi. Davom etasizmi?')"><button>Manzilni qayta yaratish</button></form>
+</section>
 <section><h3>2. Telegram chatlar ({{ acc.chats|length }}/{{ acc.max_chats }})</h3>
 <p>Botni chatga ulash: <a href="{{ tg_link }}">{{ tg_link }}</a><br>
 <span class="muted">Guruh: botni guruhga qo'shib, <code>/start@{{ config.BOT_USERNAME }} {{ acc.link_code }}</code> yuboring.<br>
@@ -18,6 +24,7 @@ Kanal: botni kanalga <b>administrator</b> (xabar yuborish huquqi bilan) qilib qo
 <td><form method="post" action="/cabinet/chat/{{ c.id }}/lang"><select name="lang" onchange="this.form.submit()">
 {% for k,v in langs.items() %}<option value="{{ k }}" {{ "selected" if k==c.lang }}>{{ v }}</option>{% endfor %}</select></form></td>
 <td><form method="post" action="/cabinet/chat/{{ c.id }}/delete"><button>O'chirish</button></form></td></tr>{% endfor %}</table>
+<form method="post" action="/cabinet/test"><button>Barcha chatlarga sinov xabari</button></form>
 <form method="post" action="/cabinet/chat"><p>yoki qo'lda:
 <input name="chat_id" placeholder="Chat ID" required>
 <select name="lang">{% for k,v in langs.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>

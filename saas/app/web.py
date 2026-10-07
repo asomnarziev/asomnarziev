@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from . import config, service, telegram
 from .db import get_db
 from .messages import LANGS, TEMPLATES
-from .models import Account, Chat, Payment, User, now
+from .models import Account, Chat, Payment, User, now, token
 from .security import encrypt, hash_password, verify_password
 
 router = APIRouter()
@@ -101,6 +101,24 @@ def save_pbx(domain: str = Form(...), key: str = Form(""), user: User = Depends(
     if key.strip():  # bo'sh qoldirilsa eski kalit saqlanadi
         user.account.pbx_key_enc = encrypt(key.strip())
     db.commit()
+    return go("/cabinet")
+
+
+@router.post("/cabinet/hook/regenerate")
+def regenerate_hook(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Webhook manzili oshkor bo'lsa — yangisini yaratadi (eskisi darrov ishlamay qoladi)."""
+    user.account.hook_token = token()
+    db.commit()
+    return go("/cabinet")
+
+
+@router.post("/cabinet/test")
+def test_message(user: User = Depends(require_user)):
+    for c in user.account.chats:
+        try:
+            telegram.send_message(c.chat_id, TEMPLATES[c.lang if c.lang in LANGS else "uz"]["lang_set"])
+        except Exception:
+            pass
     return go("/cabinet")
 
 
