@@ -147,6 +147,6 @@ code{font:.88em var(--mono);background:var(--line2);padding:1px 6px;border-radiu
 <div id="toast"></div>
 <script>
 function toast(t){var e=document.getElementById('toast');e.textContent=t;e.classList.add('show');setTimeout(function(){e.classList.remove('show')},1800)}
-function copyText(id){var t=document.getElementById(id).innerText;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){toast('Nusxalandi ✓')},function(){toast('Nusxalab bo‘lmadi')})}
+function copyText(id){var el=document.getElementById(id);var t=el.dataset.copy||el.innerText;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){toast('Nusxalandi ✓')},function(){toast('Nusxalab bo‘lmadi')})}
 </script>
 </body></html>

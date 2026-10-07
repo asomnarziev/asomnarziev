@@ -8,7 +8,7 @@
 <div class="card"><div class="ch"><span class="ico">{{ i("card") }}</span>To'lov qilish</div>
 <p class="sub">1) Pastdagi kartaga summani o'tkazing. 2) Chek (skrinshot yoki PDF) ni yuklang. 3) Administrator tasdiqlaydi.</p>
 {% if config.PAYMENT_CARD %}
-<div class="code"><span class="m">KARTA</span><code id="card">{{ config.PAYMENT_CARD }}</code><button type="button" onclick="copyText('card')">{{ i("copy",14) }}Nusxalash</button></div>
+<div class="code"><span class="m">KARTA</span><code id="card" data-copy="{{ config.PAYMENT_CARD }}" style="font-size:1.05rem;letter-spacing:.06em">{{ config.PAYMENT_CARD|card }}</code><button type="button" onclick="copyText('card')">{{ i("copy",14) }}Nusxalash</button></div>
 {% if config.PAYMENT_CARD_HOLDER %}<p class="muted small" style="margin:6px 0 0">Karta egasi: <b>{{ config.PAYMENT_CARD_HOLDER }}</b></p>{% endif %}
 {% else %}<p class="err">Karta ma'lumotlari hali sozlanmagan. Administrator bilan bog'laning.</p>{% endif %}
 <form method="post" action="/billing/checkout" enctype="multipart/form-data" style="margin-top:16px">

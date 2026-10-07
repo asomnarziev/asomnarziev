@@ -404,7 +404,8 @@ def upload(c, data=PNG, name="chek.png", plan="pro", months="3"):
 def test_receipt_upload_creates_pending_and_notifies_admin(client, pay):
     from app.models import Payment
     register(client, "c@x.uz")
-    assert "8600123412341234" in client.get("/billing").text
+    page = client.get("/billing").text
+    assert "8600 1234 1234 1234" in page and 'data-copy="8600123412341234"' in page  # ko'rinishi guruhlangan, nusxasi bo'sh joysiz
     r = upload(client)
     assert r.status_code == 303 and "ok=1" in r.headers["location"]
     with SessionLocal() as db:
@@ -519,3 +520,14 @@ def test_receipts_path_traversal(tmp_path, monkeypatch):
     for bad in ("../x.png", "/etc/passwd", "a/../../b.png"):
         with pytest.raises(FileNotFoundError):
             receipts.path(bad)
+
+
+def test_card_number_with_spaces_in_env(client, monkeypatch):
+    import importlib
+    from app import config
+    monkeypatch.setenv("PAYMENT_CARD", "8600 1234 5678 9012")
+    importlib.reload(config)
+    assert config.PAYMENT_CARD == "8600123456789012"
+    register(client, "k@x.uz")
+    page = client.get("/billing").text
+    assert "8600 1234 5678 9012" in page and 'data-copy="8600123456789012"' in page

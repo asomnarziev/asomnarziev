@@ -14,6 +14,7 @@ from .security import encrypt, hash_password, verify_password
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+templates.env.filters["card"] = lambda n: " ".join(str(n)[i:i + 4] for i in range(0, len(str(n)), 4))  # 8600123412341234 -> 8600 1234 1234 1234
 
 
 def go(url: str):
