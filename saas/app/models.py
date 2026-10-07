@@ -28,6 +28,7 @@ class User(Base):
 
 class Account(Base):
     """Bitta mijoz = bitta OnlinePBX stansiyasi."""
+
     __tablename__ = "accounts"
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
@@ -43,13 +44,16 @@ class Account(Base):
     digest_on: Mapped[bool] = mapped_column(Boolean, default=True)
     digest_hour: Mapped[int] = mapped_column(Integer, default=9)
     digest_last: Mapped[str] = mapped_column(String(10), default="")
-    missed_on: Mapped[bool] = mapped_column(Boolean, default=True)       # javobsiz qo'ng'iroq ogohlantirishi (Pro)
-    import_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # eski qo'ng'iroqlar oxirgi muvaffaqiyatli yuklangan vaqt (UTC)
-    import_note: Mapped[str] = mapped_column(String(200), default="")             # oxirgi yuklash natijasi / xatosi
+    missed_on: Mapped[bool] = mapped_column(Boolean, default=True)  # javobsiz qo'ng'iroq ogohlantirishi (Pro)
+    import_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )  # eski qo'ng'iroqlar oxirgi muvaffaqiyatli yuklangan vaqt (UTC)
+    import_note: Mapped[str] = mapped_column(String(200), default="")  # oxirgi yuklash natijasi / xatosi
     user: Mapped[User] = relationship(back_populates="account")
     chats: Mapped[list["Chat"]] = relationship(back_populates="account", cascade="all, delete-orphan")
-    logs: Mapped[list["CallLog"]] = relationship(back_populates="account", cascade="all, delete-orphan",
-                                                 order_by="CallLog.id.desc()")
+    logs: Mapped[list["CallLog"]] = relationship(
+        back_populates="account", cascade="all, delete-orphan", order_by="CallLog.id.desc()"
+    )
 
     @property
     def valid_until(self) -> datetime:
@@ -61,8 +65,12 @@ class Account(Base):
 
     def can(self, feature: str) -> bool:
         """Pullik, faol obuna tarifida shu imkoniyat bormi (sinov muddatida pullik imkoniyatlar yopiq)."""
-        return (not self.suspended and self.paid_until is not None and self.paid_until > now()
-                and feature in config.PLANS.get(self.plan, {}).get("features", ()))
+        return (
+            not self.suspended
+            and self.paid_until is not None
+            and self.paid_until > now()
+            and feature in config.PLANS.get(self.plan, {}).get("features", ())
+        )
 
     @property
     def max_chats(self) -> int:
@@ -91,12 +99,12 @@ class CallLog(Base):
     error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     # Hisobotlar uchun qo'ng'iroq ma'lumoti (OnlinePBX'dan olinadi; vaqt UTC)
-    direction: Mapped[str] = mapped_column(String(10), default="")        # inbound / outbound / local
+    direction: Mapped[str] = mapped_column(String(10), default="")  # inbound / outbound / local
     caller: Mapped[str] = mapped_column(String(40), default="")
     callee: Mapped[str] = mapped_column(String(40), default="")
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
-    duration: Mapped[int] = mapped_column(Integer, default=0)             # umumiy davomiylik, soniya
-    talk: Mapped[int | None] = mapped_column(Integer, nullable=True)      # suhbat vaqti (javob berilgan bo'lsa), noma'lum bo'lsa None
+    duration: Mapped[int] = mapped_column(Integer, default=0)  # umumiy davomiylik, soniya
+    talk: Mapped[int | None] = mapped_column(Integer, nullable=True)  # suhbat vaqti (javob berilgan bo'lsa), noma'lum bo'lsa None
     account: Mapped[Account] = relationship(back_populates="logs")
 
 
@@ -109,8 +117,8 @@ class Payment(Base):
     provider: Mapped[str] = mapped_column(String(20), default="manual")
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/paid/rejected
     months: Mapped[int] = mapped_column(Integer, default=1)
-    receipt: Mapped[str] = mapped_column(String(100), default="")       # chek fayli nomi (UPLOAD_DIR ichida)
-    note: Mapped[str] = mapped_column(Text, default="")                 # rad etish sababi
-    comment: Mapped[str] = mapped_column(Text, default="")              # mijozning izohi (chek bo'lmasa majburiy)
+    receipt: Mapped[str] = mapped_column(String(100), default="")  # chek fayli nomi (UPLOAD_DIR ichida)
+    note: Mapped[str] = mapped_column(Text, default="")  # rad etish sababi
+    comment: Mapped[str] = mapped_column(Text, default="")  # mijozning izohi (chek bo'lmasa majburiy)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     account: Mapped[Account] = relationship()

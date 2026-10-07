@@ -1,6 +1,7 @@
 """Foydalanuvchi yaratish (birinchi adminni ham shu bilan):
-   python -m app.create_user email@example.com PAROL [--admin]
+python -m app.create_user email@example.com PAROL [--admin]
 """
+
 import sys
 
 from .db import SessionLocal, init_db

@@ -15,14 +15,20 @@ class TelegramError(Exception):
 
 # Telegram sababi -> mijozga tushunarli tushuntirish
 _HINTS = [
-    ("chat not found", "Chat topilmadi: ID noto'g'ri, yoki bot bu chat bilan hech qachon bog'lanmagan. "
-                       "Eng oson yo'l: yuqoridagi havolani oching va Start bosing."),
+    (
+        "chat not found",
+        "Chat topilmadi: ID noto'g'ri, yoki bot bu chat bilan hech qachon bog'lanmagan. "
+        "Eng oson yo'l: yuqoridagi havolani oching va Start bosing.",
+    ),
     ("bot can't initiate conversation", "Bot siz bilan suhbat boshlay olmaydi: avval botga shaxsiy chatda /start yuboring."),
     ("bot was blocked", "Foydalanuvchi botni bloklagan. Blokdan chiqarib, /start yuboring."),
     ("not a member", "Bot bu guruh/kanalga qo'shilmagan. Botni qo'shing (kanalda administrator qilib)."),
     ("kicked", "Bot bu guruh/kanaldan chiqarib yuborilgan. Qayta qo'shing."),
     ("not enough rights", "Botda bu yerga yozish huquqi yo'q. Kanalda botni administrator (xabar yuborish huquqi bilan) qiling."),
-    ("have no rights to send", "Botda bu yerga yozish huquqi yo'q. Kanalda botni administrator (xabar yuborish huquqi bilan) qiling."),
+    (
+        "have no rights to send",
+        "Botda bu yerga yozish huquqi yo'q. Kanalda botni administrator (xabar yuborish huquqi bilan) qiling.",
+    ),
     ("need administrator rights", "Kanalda botni administrator (xabar yuborish huquqi bilan) qiling."),
 ]
 
@@ -56,8 +62,11 @@ def send_message(chat_id, text, markup=None):
 
 
 def send_audio(chat_id, caption, audio: bytes, filename: str):
-    return _call("sendAudio", data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
-                 files={"audio": (filename, audio, "audio/mpeg")})
+    return _call(
+        "sendAudio",
+        data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
+        files={"audio": (filename, audio, "audio/mpeg")},
+    )
 
 
 def send_file(chat_id, caption, data: bytes, filename: str, mime: str, markup=None):
@@ -74,8 +83,10 @@ def answer_callback(cb_id, text):
 
 
 def clear_buttons(chat_id, message_id):
-    return _call("editMessageReplyMarkup", data={"chat_id": chat_id, "message_id": message_id,
-                                                  "reply_markup": json.dumps({"inline_keyboard": []})})
+    return _call(
+        "editMessageReplyMarkup",
+        data={"chat_id": chat_id, "message_id": message_id, "reply_markup": json.dumps({"inline_keyboard": []})},
+    )
 
 
 def set_webhook():

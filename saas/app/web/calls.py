@@ -2,6 +2,7 @@
 
 Yozuv fayllari serverda saqlanmaydi: har safar OnlinePBX'dan xotiraga olinib, brauzerga uzatiladi.
 """
+
 import logging
 import time
 from collections import defaultdict, deque
@@ -33,8 +34,9 @@ def _fetch_record(acc: Account, uuid: str) -> bytes:
     while q and t - q[0] > 3600:
         q.popleft()
     if len(q) >= config.MAX_RECORD_FETCH_PER_HOUR:
-        raise HTTPException(429, f"Yozuvni qayta olish limiti oshdi (soatiga {config.MAX_RECORD_FETCH_PER_HOUR} ta). "
-                                 "Keyinroq urinib ko'ring.")
+        raise HTTPException(
+            429, f"Yozuvni qayta olish limiti oshdi (soatiga {config.MAX_RECORD_FETCH_PER_HOUR} ta). Keyinroq urinib ko'ring."
+        )
     q.append(t)
     try:
         audio = PbxClient(acc.pbx_domain, decrypt(acc.pbx_key_enc)).record(uuid)
@@ -55,8 +57,14 @@ def _own_call(db: Session, user: User, call_id: int) -> CallLog:
 def _row_to_call(row: CallLog) -> dict:
     """CallLog qatoridan OnlinePBX javobiga o'xshash lug'at (xabar shablonlari uchun)."""
     stamp = int(row.started_at.replace(tzinfo=UTC).timestamp()) if row.started_at else None
-    return {"uuid": row.uuid, "accountcode": row.direction, "caller_id_number": row.caller,
-            "destination_number": row.callee, "duration": row.duration, "start_stamp": stamp}
+    return {
+        "uuid": row.uuid,
+        "accountcode": row.direction,
+        "caller_id_number": row.caller,
+        "destination_number": row.callee,
+        "duration": row.duration,
+        "start_stamp": stamp,
+    }
 
 
 def _search(db: Session, acc: Account, q: str, ext: str, direction: str, status: str, start, end):
@@ -78,9 +86,20 @@ def _search(db: Session, acc: Account, q: str, ext: str, direction: str, status:
 
 
 @router.get("/calls")
-def calls_page(request: Request, q: str = "", ext: str = "", d: str = "", st: str = "", frm: str | None = None,
-               to: str | None = None, page: int = 1, ok: str | None = None, error: str | None = None,
-               user: User = Depends(require_user), db: Session = Depends(get_db)):
+def calls_page(
+    request: Request,
+    q: str = "",
+    ext: str = "",
+    d: str = "",
+    st: str = "",
+    frm: str | None = None,
+    to: str | None = None,
+    page: int = 1,
+    ok: str | None = None,
+    error: str | None = None,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     """Qo'ng'iroqlarni raqam, xodim, yo'nalish, holat va sana bo'yicha qidirish (Pro)."""
     if not can_search(user):
         return render(request, "calls_locked.html", user=user, acc=user.account, plans=config.PLANS)
@@ -92,9 +111,28 @@ def calls_page(request: Request, q: str = "", ext: str = "", d: str = "", st: st
     page = min(max(page, 1), pages)
     rows = qs.order_by(CallLog.started_at.desc()).offset((page - 1) * PAGE).limit(PAGE).all()
     base = urlencode({"q": q, "ext": ext, "d": d, "st": st, "frm": start.isoformat(), "to": end.isoformat()})
-    return render(request, "calls.html", user=user, acc=user.account, rows=rows, total=total, page=page, pages=pages,
-                  q=q, ext=ext, d=d, st=st, start=start, end=end, base=base, local=reports.local,
-                  answered=reports.answered, parties=reports.parties, ok=ok, error=error)
+    return render(
+        request,
+        "calls.html",
+        user=user,
+        acc=user.account,
+        rows=rows,
+        total=total,
+        page=page,
+        pages=pages,
+        q=q,
+        ext=ext,
+        d=d,
+        st=st,
+        start=start,
+        end=end,
+        base=base,
+        local=reports.local,
+        answered=reports.answered,
+        parties=reports.parties,
+        ok=ok,
+        error=error,
+    )
 
 
 @router.get("/calls/{call_id}/record")
@@ -104,9 +142,14 @@ def call_record(call_id: int, download: int = 0, user: User = Depends(require_us
     row = _own_call(db, user, call_id)
     audio = _fetch_record(user.account, row.uuid)
     name = service.audio_name(_row_to_call(row))
-    return Response(audio, media_type="audio/mpeg", headers={
-        "Content-Disposition": f'{"attachment" if download else "inline"}; filename="{name}"',
-        "Cache-Control": "private, no-store"})
+    return Response(
+        audio,
+        media_type="audio/mpeg",
+        headers={
+            "Content-Disposition": f'{"attachment" if download else "inline"}; filename="{name}"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @router.post("/calls/{call_id}/send")

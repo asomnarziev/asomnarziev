@@ -1,5 +1,9 @@
 """Xabar shablonlari (uz / ru). Yangi til qo'shish uchun TEMPLATES ga kalit qo'shing."""
 
+import os
+from datetime import datetime, timedelta, timezone
+from html import escape
+
 LANGS = {"uz": "🇺🇿 O'zbekcha", "ru": "🇷🇺 Русский"}
 DEFAULT_LANG = "uz"
 
@@ -66,10 +70,6 @@ def fmt_duration(seconds: int) -> str:
     h, m = divmod(m, 60)
     return f"{h:d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
-
-import os
-from datetime import datetime, timedelta, timezone
-from html import escape
 
 # Server UTC'da ishlaydi; xabarlarda mijozning mahalliy vaqti ko'rsatiladi (Toshkent = UTC+5)
 LOCAL_TZ = timezone(timedelta(hours=float(os.environ.get("TZ_OFFSET_HOURS", "5"))))

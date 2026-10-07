@@ -2,12 +2,10 @@
 
 from fastapi.testclient import TestClient
 
-from app import service
-from app import telegram
+from app import service, telegram
 from app.db import SessionLocal
 from app.main import app
-from app.models import Account
-from app.models import Chat
+from app.models import Account, Chat
 from tests.helpers import register
 
 
@@ -43,7 +41,10 @@ def test_channel_link_and_username(client, monkeypatch):
 
 def test_manual_add_rejected_when_bot_cannot_write(client, monkeypatch):
     register(client)
-    def boom(*a, **k): raise RuntimeError("403")
+
+    def boom(*a, **k):
+        raise RuntimeError("403")
+
     monkeypatch.setattr(telegram, "send_message", boom)
     r = client.post("/cabinet/chat", data={"chat_id": "-1005", "lang": "uz"}, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"].startswith("/cabinet?error=")
@@ -88,6 +89,7 @@ def test_each_tenant_has_own_hook_and_regenerate(client):
 
 def test_id_command_and_no_admin_chat(client, monkeypatch):
     from app import config
+
     out = []
     monkeypatch.setattr(telegram, "send_message", lambda chat, text, markup=None: out.append((chat, text)))
     client.post("/tg/tg-secret", json={"message": {"text": "/id", "chat": {"id": 12345}}})
@@ -103,8 +105,12 @@ def test_manual_chat_errors_are_shown_on_page_with_telegram_reason(client, monke
 
     class Resp:
         status_code = 400
-        def json(self): return {"ok": False, "description": "Bad Request: chat not found"}
-        def raise_for_status(self): raise AssertionError("raise_for_status ishlatilmasligi kerak")
+
+        def json(self):
+            return {"ok": False, "description": "Bad Request: chat not found"}
+
+        def raise_for_status(self):
+            raise AssertionError("raise_for_status ishlatilmasligi kerak")
 
     monkeypatch.setattr(telegram.requests, "post", lambda *a, **k: Resp())
     r = client.post("/cabinet/chat", data={"chat_id": "123456", "lang": "uz"}, follow_redirects=True)

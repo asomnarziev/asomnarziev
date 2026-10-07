@@ -1,4 +1,5 @@
 """Pro tarif hisobotlari: saqlangan qo'ng'iroqlar (CallLog) bo'yicha statistika, SVG grafiklar, CSV."""
+
 import csv
 import io
 from collections import Counter, defaultdict
@@ -35,15 +36,20 @@ def parse_period(period: str | None, frm: str | None, to: str | None) -> tuple[d
 
 def utc_bounds(start: date, end: date) -> tuple[datetime, datetime]:
     """Mahalliy [start, end] kunlarni UTC (naive) yarim ochiq oraliqqa aylantiradi."""
+
     def conv(d: date) -> datetime:
         return datetime.combine(d, time(0), LOCAL_TZ).astimezone(UTC).replace(tzinfo=None)
+
     return conv(start), conv(end + timedelta(days=1))
 
 
 def load(db: Session, account_id: int, start: date, end: date, limit: int | None = None) -> list[CallLog]:
     lo, hi = utc_bounds(start, end)
-    q = (db.query(CallLog).filter(CallLog.account_id == account_id, CallLog.started_at >= lo, CallLog.started_at < hi)
-         .order_by(CallLog.started_at.desc()))
+    q = (
+        db.query(CallLog)
+        .filter(CallLog.account_id == account_id, CallLog.started_at >= lo, CallLog.started_at < hi)
+        .order_by(CallLog.started_at.desc())
+    )
     return q.limit(limit).all() if limit else q.all()
 
 
@@ -107,14 +113,22 @@ def build(rows: list[CallLog], start: date, end: date) -> dict:
             if not answered(r):
                 missed_ext[x] += 1
     return {
-        "total": total, "answered": len(ans), "missed": total - len(ans),
+        "total": total,
+        "answered": len(ans),
+        "missed": total - len(ans),
         "answer_rate": round(100 * len(ans) / total) if total else 0,
-        "inbound": dirs.get("inbound", 0), "outbound": dirs.get("outbound", 0), "local": dirs.get("local", 0),
-        "talk_total": fmt_duration(talk_total), "talk_avg": fmt_duration(talk_total // len(ans)) if ans else "00:00",
-        "by_day": [(d, c, t) for d, (c, t) in by_day.items()], "by_hour": by_hour,
-        "employees": sorted(({"ext": k, **v, "talk_fmt": fmt_duration(v["talk"])} for k, v in emp.items()),
-                            key=lambda x: -x["calls"])[:15],
-        "top_numbers": ext.most_common(10), "missed_numbers": missed_ext.most_common(5),
+        "inbound": dirs.get("inbound", 0),
+        "outbound": dirs.get("outbound", 0),
+        "local": dirs.get("local", 0),
+        "talk_total": fmt_duration(talk_total),
+        "talk_avg": fmt_duration(talk_total // len(ans)) if ans else "00:00",
+        "by_day": [(d, c, t) for d, (c, t) in by_day.items()],
+        "by_hour": by_hour,
+        "employees": sorted(
+            ({"ext": k, **v, "talk_fmt": fmt_duration(v["talk"])} for k, v in emp.items()), key=lambda x: -x["calls"]
+        )[:15],
+        "top_numbers": ext.most_common(10),
+        "missed_numbers": missed_ext.most_common(5),
         "busiest_hour": max(range(24), key=lambda h: by_hour[h]) if total else None,
     }
 
@@ -134,8 +148,10 @@ def bar_svg(items: list[tuple[str, int, str]], height: int = 150, cls: str = "ch
     for i, (label, v, tip) in enumerate(items):
         h = (height - pad_b - pad_t) * v / peak
         x = i * slot + (slot - bw) / 2
-        out.append(f'<rect x="{x:.1f}" y="{height - pad_b - h:.1f}" width="{bw:.1f}" height="{max(h, 1 if v else 0):.1f}" rx="2">'
-                   f'<title>{escape(tip)}</title></rect>')
+        out.append(
+            f'<rect x="{x:.1f}" y="{height - pad_b - h:.1f}" width="{bw:.1f}" height="{max(h, 1 if v else 0):.1f}" rx="2">'
+            f"<title>{escape(tip)}</title></rect>"
+        )
         if i % label_every == 0:
             out.append(f'<text x="{x + bw / 2:.1f}" y="{height - 6}" text-anchor="middle">{escape(label)}</text>')
     out.append("</svg>")
@@ -166,32 +182,67 @@ def to_csv(rows: list[CallLog]) -> str:
     w.writerow(["Sana", "Yo'nalish", "Kimdan", "Kimga", "Xodim", "Davomiylik (s)", "Suhbat (s)", "Holat", "ID"])
     for r in rows:
         e, _ = parties(r)
-        w.writerow([local(r.started_at).strftime("%Y-%m-%d %H:%M:%S"), _safe(r.direction), _safe(r.caller), _safe(r.callee),
-                    _safe(e), r.duration or 0, talk_seconds(r), "javob berilgan" if answered(r) else "javob berilmagan", r.uuid])
+        w.writerow(
+            [
+                local(r.started_at).strftime("%Y-%m-%d %H:%M:%S"),
+                _safe(r.direction),
+                _safe(r.caller),
+                _safe(r.callee),
+                _safe(e),
+                r.duration or 0,
+                talk_seconds(r),
+                "javob berilgan" if answered(r) else "javob berilmagan",
+                r.uuid,
+            ]
+        )
     return "﻿" + buf.getvalue()  # BOM: Excel UTF-8 ni to'g'ri ochadi
 
 
 # ---------- Telegram uchun kunlik hisobot matni ----------
 DIGEST = {
-    "uz": {"title": "Kunlik hisobot", "test": "sinov", "summary": "Jami: <b>{total}</b> · javob berilgan: <b>{answered}</b> ({rate}%) · javobsiz: <b>{missed}</b>",
-           "dirs": "Kiruvchi: {inbound} · chiquvchi: {outbound}", "talk": "Suhbat vaqti: {talk} (o'rtacha {avg})",
-           "busy": "Eng gavjum soat: {hour}:00", "emps": "Xodimlar", "emp": "<code>{ext}</code> — {calls} ta, javobsiz {missed}",
-           "missed": "Javobsiz raqamlar", "num": "<code>{num}</code> — {n} ta"},
-    "ru": {"title": "Дневной отчёт", "test": "тест", "summary": "Всего: <b>{total}</b> · отвечено: <b>{answered}</b> ({rate}%) · пропущено: <b>{missed}</b>",
-           "dirs": "Входящие: {inbound} · исходящие: {outbound}", "talk": "Время разговоров: {talk} (в среднем {avg})",
-           "busy": "Самый загруженный час: {hour}:00", "emps": "Сотрудники", "emp": "<code>{ext}</code> — {calls}, пропущено {missed}",
-           "missed": "Пропущенные номера", "num": "<code>{num}</code> — {n}"},
+    "uz": {
+        "title": "Kunlik hisobot",
+        "test": "sinov",
+        "summary": "Jami: <b>{total}</b> · javob berilgan: <b>{answered}</b> ({rate}%) · javobsiz: <b>{missed}</b>",
+        "dirs": "Kiruvchi: {inbound} · chiquvchi: {outbound}",
+        "talk": "Suhbat vaqti: {talk} (o'rtacha {avg})",
+        "busy": "Eng gavjum soat: {hour}:00",
+        "emps": "Xodimlar",
+        "emp": "<code>{ext}</code> — {calls} ta, javobsiz {missed}",
+        "missed": "Javobsiz raqamlar",
+        "num": "<code>{num}</code> — {n} ta",
+    },
+    "ru": {
+        "title": "Дневной отчёт",
+        "test": "тест",
+        "summary": "Всего: <b>{total}</b> · отвечено: <b>{answered}</b> ({rate}%) · пропущено: <b>{missed}</b>",
+        "dirs": "Входящие: {inbound} · исходящие: {outbound}",
+        "talk": "Время разговоров: {talk} (в среднем {avg})",
+        "busy": "Самый загруженный час: {hour}:00",
+        "emps": "Сотрудники",
+        "emp": "<code>{ext}</code> — {calls}, пропущено {missed}",
+        "missed": "Пропущенные номера",
+        "num": "<code>{num}</code> — {n}",
+    },
 }
 
 
 def render_digest(lang: str, day: date, d: dict, test: bool = False) -> str:
     t = DIGEST.get(lang) or DIGEST["uz"]
     title = f"📊 <b>{t['title']}</b> · {day.strftime('%d.%m.%Y')}" + (f" ({t['test']})" if test else "")
-    lines = [title, "", t["summary"].format(rate=d["answer_rate"], **{k: d[k] for k in ("total", "answered", "missed")}), t["dirs"].format(inbound=d["inbound"], outbound=d["outbound"]), t["talk"].format(talk=d["talk_total"], avg=d["talk_avg"])]
+    lines = [
+        title,
+        "",
+        t["summary"].format(rate=d["answer_rate"], **{k: d[k] for k in ("total", "answered", "missed")}),
+        t["dirs"].format(inbound=d["inbound"], outbound=d["outbound"]),
+        t["talk"].format(talk=d["talk_total"], avg=d["talk_avg"]),
+    ]
     if d["busiest_hour"] is not None:
         lines.append(t["busy"].format(hour=f"{d['busiest_hour']:02d}"))
     if d["employees"]:
-        lines += ["", f"<b>{t['emps']}</b>"] + [t["emp"].format(ext=escape(e["ext"]), calls=e["calls"], missed=e["missed"]) for e in d["employees"][:5]]
+        lines += ["", f"<b>{t['emps']}</b>"] + [
+            t["emp"].format(ext=escape(e["ext"]), calls=e["calls"], missed=e["missed"]) for e in d["employees"][:5]
+        ]
     if d["missed_numbers"]:
         lines += ["", f"<b>{t['missed']}</b>"] + [t["num"].format(num=escape(n), n=c) for n, c in d["missed_numbers"]]
     return "\n".join(lines)

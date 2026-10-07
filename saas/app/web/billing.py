@@ -1,4 +1,5 @@
 """Tarif va kartaga o'tkazma orqali to'lov: chek yuklash, to'lovlar tarixi, chekni ko'rish."""
+
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -13,18 +14,40 @@ MONTHS = (1, 3, 6, 12)
 
 
 @router.get("/billing")
-def billing(request: Request, error: str | None = None, ok: str | None = None, user: User = Depends(require_user),
-            db: Session = Depends(get_db)):
+def billing(
+    request: Request,
+    error: str | None = None,
+    ok: str | None = None,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     acc = user.account
     history = db.query(Payment).filter(Payment.account_id == acc.id).order_by(Payment.id.desc()).limit(10).all()
-    return render(request, "billing.html", user=user, acc=acc, plans=config.PLANS, months=MONTHS, history=history,
-                  error=error, ok=ok, amount=service.payment_amount, max_mb=config.MAX_RECEIPT_MB)
+    return render(
+        request,
+        "billing.html",
+        user=user,
+        acc=acc,
+        plans=config.PLANS,
+        months=MONTHS,
+        history=history,
+        error=error,
+        ok=ok,
+        amount=service.payment_amount,
+        max_mb=config.MAX_RECEIPT_MB,
+    )
 
 
 @router.post("/billing/checkout")
-async def checkout(bg: BackgroundTasks, plan: str = Form(...), months: int = Form(1), comment: str = Form(""),
-                   receipt: UploadFile | None = File(None), user: User = Depends(require_user),
-                   db: Session = Depends(get_db)):
+async def checkout(
+    bg: BackgroundTasks,
+    plan: str = Form(...),
+    months: int = Form(1),
+    comment: str = Form(""),
+    receipt: UploadFile | None = File(None),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     """Mijoz kartaga o'tkazgach chekni yuklaydi. Chek bo'lmasa izoh majburiy. To'lov 'pending', adminga Telegramda eslatma."""
     acc, comment = user.account, comment.strip()[:500]
     if plan not in config.PLANS or months not in MONTHS:
@@ -41,8 +64,15 @@ async def checkout(bg: BackgroundTasks, plan: str = Form(...), months: int = For
             name = receipts.save(data)
         except receipts.ReceiptError as e:
             return go("/billing", error=str(e))
-    payment = Payment(account_id=acc.id, plan=plan, months=months, amount=config.PLANS[plan]["price"] * months,
-                      provider="card", receipt=name, comment=comment)
+    payment = Payment(
+        account_id=acc.id,
+        plan=plan,
+        months=months,
+        amount=config.PLANS[plan]["price"] * months,
+        provider="card",
+        receipt=name,
+        comment=comment,
+    )
     db.add(payment)
     db.commit()
     bg.add_task(service.notify_admin_payment, payment.id)
@@ -59,6 +89,13 @@ def receipt_file(pid: int, user: User = Depends(require_user), db: Session = Dep
         path = receipts.path(payment.receipt)
     except FileNotFoundError:
         raise HTTPException(404) from None
-    return FileResponse(path, media_type=receipts.mime(payment.receipt), headers={
-        "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; sandbox",
-        "Content-Disposition": "inline", "Cache-Control": "private, no-store"})
+    return FileResponse(
+        path,
+        media_type=receipts.mime(payment.receipt),
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Content-Disposition": "inline",
+            "Cache-Control": "private, no-store",
+        },
+    )

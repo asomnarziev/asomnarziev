@@ -3,12 +3,14 @@
 Bitta jarayon ichida ishlaydi (bitta uvicorn worker). `publish` istalgan oqimdan (webhook fon vazifasi) chaqiriladi,
 `subscribe` esa asyncio oqimidan: har obunachining o'z event-loop'i va navbati bor.
 """
+
 import asyncio
+import contextlib
 import threading
 from dataclasses import dataclass, field
 
-MAX_PER_ACCOUNT = 10   # bitta mijozning bir vaqtdagi ochiq ulanishlari (resursni himoya qilish)
-KEEPALIVE = 25         # soniya: proksi (nginx 60s) ulanishni uzib qo'ymasligi uchun
+MAX_PER_ACCOUNT = 10  # bitta mijozning bir vaqtdagi ochiq ulanishlari (resursni himoya qilish)
+KEEPALIVE = 25  # soniya: proksi (nginx 60s) ulanishni uzib qo'ymasligi uchun
 
 
 @dataclass(eq=False)
@@ -42,10 +44,8 @@ def unsubscribe(sub: Sub) -> None:
 
 
 def _put(queue: asyncio.Queue, event: dict) -> None:
-    try:
+    with contextlib.suppress(asyncio.QueueFull):  # sekin mijoz: hodisani tashlaymiz, keyingisi sahifani baribir yangilaydi
         queue.put_nowait(event)
-    except asyncio.QueueFull:  # sekin mijoz: hodisani tashlaymiz, keyingisi sahifani baribir to'liq yangilaydi
-        pass
 
 
 def publish(account_id: int, event: dict) -> int:

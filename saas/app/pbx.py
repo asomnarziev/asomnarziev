@@ -6,6 +6,7 @@ Himoya: (1) auth kaliti keshlanadi — har qo'ng'iroqda qayta auth qilinmaydi;
 (4) noto'g'ri domen/kalit bo'lsa auth qayta-qayta urilmaydi (cooldown).
 Rasmiy limitlar noma'lum, shuning uchun hammasi muhit o'zgaruvchilari bilan sozlanadi.
 """
+
 import hashlib
 import os
 import random
@@ -15,10 +16,10 @@ import time
 import requests
 
 HOSTS = [h.strip() for h in os.environ.get("PBX_API_HOSTS", "api.onlinepbx.ru,api2.onlinepbx.ru").split(",") if h.strip()]
-RPS_TENANT = float(os.environ.get("PBX_RPS_PER_TENANT", "2"))   # bitta mijoz uchun so'rov/soniya
-RPS_GLOBAL = float(os.environ.get("PBX_RPS_GLOBAL", "10"))      # barcha mijozlar uchun umumiy
-KEY_TTL = int(os.environ.get("PBX_KEY_TTL", "21600"))           # auth kaliti keshda necha soniya turadi
-AUTH_COOLDOWN = int(os.environ.get("PBX_AUTH_COOLDOWN", "300")) # noto'g'ri kalitdan keyin auth'ga tanaffus
+RPS_TENANT = float(os.environ.get("PBX_RPS_PER_TENANT", "2"))  # bitta mijoz uchun so'rov/soniya
+RPS_GLOBAL = float(os.environ.get("PBX_RPS_GLOBAL", "10"))  # barcha mijozlar uchun umumiy
+KEY_TTL = int(os.environ.get("PBX_KEY_TTL", "21600"))  # auth kaliti keshda necha soniya turadi
+AUTH_COOLDOWN = int(os.environ.get("PBX_AUTH_COOLDOWN", "300"))  # noto'g'ri kalitdan keyin auth'ga tanaffus
 MAX_RETRIES = int(os.environ.get("PBX_MAX_RETRIES", "3"))
 
 _now = time.monotonic  # testlarda almashtiriladi
@@ -53,8 +54,8 @@ class Gate:
 
 _state = threading.Lock()
 _gates: dict[str, Gate] = {}
-_keys: dict[tuple, tuple] = {}      # ident -> (base, key, expires)
-_fail: dict[tuple, float] = {}      # ident -> cooldown tugaydigan vaqt
+_keys: dict[tuple, tuple] = {}  # ident -> (base, key, expires)
+_fail: dict[tuple, float] = {}  # ident -> cooldown tugaydigan vaqt
 _auth_locks: dict[tuple, threading.Lock] = {}
 GLOBAL_GATE = Gate(RPS_GLOBAL)
 
@@ -67,7 +68,10 @@ def _gate(domain: str) -> Gate:
 def reset_state():
     """Testlar uchun."""
     with _state:
-        _gates.clear(); _keys.clear(); _fail.clear(); _auth_locks.clear()
+        _gates.clear()
+        _keys.clear()
+        _fail.clear()
+        _auth_locks.clear()
 
 
 def _retry_after(r) -> float | None:
@@ -97,7 +101,7 @@ class PbxClient:
         GLOBAL_GATE.wait()
 
     def _backoff(self, attempt: int, retry_after: float | None):
-        delay = retry_after if retry_after is not None else min(60, 2 ** (attempt + 1)) + random.random()
+        delay = retry_after if retry_after is not None else min(60, 2 ** (attempt + 1)) + random.random()  # noqa: S311  # nosec B311 - jitter, kriptografiya emas
         self.gate.penalize(delay)
         _sleep(delay)
 
@@ -121,7 +125,10 @@ class PbxClient:
             with _state:
                 until = _fail.get(self.ident, 0)
             if until > _now():
-                raise PbxError(f"OnlinePBX auth vaqtincha to'xtatilgan (domen/kalit noto'g'ri bo'lishi mumkin), {int(until - _now())} soniyadan keyin qayta uriniladi")
+                raise PbxError(
+                    "OnlinePBX auth vaqtincha to'xtatilgan (domen/kalit noto'g'ri bo'lishi mumkin), "
+                    f"{int(until - _now())} soniyadan keyin qayta uriniladi"
+                )
             errors, cred = [], []  # cred: har xost uchun "xato domen/kalit tufayli" belgisi
             for host in HOSTS:
                 base = f"https://{host}/{self.domain}"
@@ -130,12 +137,14 @@ class PbxClient:
                     r = self.s.post(f"{base}/auth.json", data={"auth_key": self.auth_key, "new": "true"}, timeout=30)
                     if r.status_code == 429:
                         self.gate.penalize(_retry_after(r) or 30)
-                        errors.append(f"{host}: 429 so'rovlar limiti"); cred.append(False)
+                        errors.append(f"{host}: 429 so'rovlar limiti")
+                        cred.append(False)
                         continue
                     r.raise_for_status()
                     body = r.json()
                     if str(body.get("status")) not in ("1", "True", "true") and "data" not in body:
-                        errors.append(f"{host}: auth rad etildi: {str(body)[:200]}"); cred.append(True)
+                        errors.append(f"{host}: auth rad etildi: {str(body)[:200]}")
+                        cred.append(True)
                         continue
                     d = body["data"]
                     self.base, self.key = base, f"{d['key_id']}:{d['key']}"
@@ -145,9 +154,11 @@ class PbxClient:
                     return
                 except requests.HTTPError as e:
                     code = e.response.status_code if e.response is not None else 0
-                    errors.append(f"{host}: {e}"); cred.append(code in (400, 401, 403, 404))
+                    errors.append(f"{host}: {e}")
+                    cred.append(code in (400, 401, 403, 404))
                 except (requests.RequestException, ValueError, KeyError) as e:
-                    errors.append(f"{host}: {e}"); cred.append(False)
+                    errors.append(f"{host}: {e}")
+                    cred.append(False)
             if cred and all(cred):  # hamma xost 4xx/rad etdi — domen yoki kalit noto'g'ri: tanaffus (tarmoq xatosida emas)
                 with _state:
                     _fail[self.ident] = _now() + AUTH_COOLDOWN
@@ -169,7 +180,7 @@ class PbxClient:
                 r = self.s.post(f"{self.base}/{path}", data=data, headers={"x-pbx-authentication": self.key}, timeout=60)
             except requests.RequestException as e:
                 if attempt >= MAX_RETRIES:
-                    raise PbxError(f"OnlinePBX tarmoq xatosi: {e}")
+                    raise PbxError(f"OnlinePBX tarmoq xatosi: {e}") from e
                 self._backoff(attempt, None)
                 continue
             if r.status_code in (401, 403) and not reauthed:
@@ -180,7 +191,10 @@ class PbxClient:
                 raise PbxError(f"OnlinePBX kalitni rad etdi ({r.status_code})")
             if r.status_code == 429 or r.status_code >= 500:
                 if attempt >= MAX_RETRIES:
-                    raise PbxError(f"OnlinePBX {'limiti (429)' if r.status_code == 429 else 'xatosi'} {r.status_code}: keyinroq qayta uriniladi")
+                    raise PbxError(
+                        f"OnlinePBX {'limiti (429)' if r.status_code == 429 else 'xatosi'} {r.status_code}: "
+                        "keyinroq qayta uriniladi"
+                    )
                 self._backoff(attempt, _retry_after(r))
                 continue
             r.raise_for_status()

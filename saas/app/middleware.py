@@ -1,4 +1,5 @@
 """Xavfsizlik middleware'lari. Sof ASGI: BaseHTTPMiddleware'dan farqli o'laroq SSE oqimini buzmaydi."""
+
 from urllib.parse import urlsplit
 
 from starlette.datastructures import Headers, MutableHeaders
@@ -6,9 +7,11 @@ from starlette.responses import JSONResponse
 
 # Sahifalarda inline <style>/<script> ishlatiladi (tashqi kutubxona yo'q), shuning uchun 'unsafe-inline' kerak;
 # qolgani qat'iy: tashqi resurslar, iframe ichiga joylash va tashqi formaga yuborish taqiqlangan.
-CSP = ("default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; "
-       "script-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; "
-       "form-action 'self'; frame-ancestors 'none'")
+CSP = (
+    "default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "script-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; "
+    "form-action 'self'; frame-ancestors 'none'"
+)
 
 
 class SecurityHeadersMiddleware:

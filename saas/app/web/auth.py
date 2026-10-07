@@ -1,4 +1,5 @@
 """Kirish va chiqish."""
+
 from fastapi import APIRouter, Depends, Form, Request
 from sqlalchemy.orm import Session
 
@@ -28,8 +29,13 @@ def login(request: Request, email: str = Form(...), password: str = Form(...), d
     ip = request.client.host if request.client else "?"
     wait = login_throttle.blocked(ip, email)
     if wait:
-        return render(request, "auth.html", status_code=429, mode="login",
-                      error=f"Juda ko'p urinish. {wait // 60 + 1} daqiqadan keyin qayta urinib ko'ring")
+        return render(
+            request,
+            "auth.html",
+            status_code=429,
+            mode="login",
+            error=f"Juda ko'p urinish. {wait // 60 + 1} daqiqadan keyin qayta urinib ko'ring",
+        )
     user = db.query(User).filter_by(email=email).first()
     if not verify_password(password, user.password_hash if user else _DUMMY_HASH) or not user:
         login_throttle.fail(ip, email)

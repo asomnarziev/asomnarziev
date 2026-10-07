@@ -2,6 +2,7 @@
 
 Xotirada ishlaydi (bitta jarayon). Kalitlar soni chegaralangan, shuning uchun hujumchi xotirani to'ldira olmaydi.
 """
+
 import threading
 import time
 from collections import deque

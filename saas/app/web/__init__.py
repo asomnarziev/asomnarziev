@@ -1,4 +1,5 @@
 """Veb-qatlam: sahifalar mavzular bo'yicha alohida modullarda."""
+
 from fastapi import APIRouter
 
 from . import admin, analytics, auth, billing, cabinet, calls, stream

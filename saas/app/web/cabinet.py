@@ -1,4 +1,5 @@
 """Mijoz kabineti: OnlinePBX ulash, webhook, Telegram chatlar, Pro sozlamalari (kunlik hisobot, ogohlantirish)."""
+
 import logging
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -16,21 +17,39 @@ router = APIRouter()
 
 
 @router.get("/cabinet")
-def cabinet(request: Request, error: str | None = None, ok: str | None = None, user: User = Depends(require_user),
-            db: Session = Depends(get_db)):
+def cabinet(
+    request: Request,
+    error: str | None = None,
+    ok: str | None = None,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     acc = user.account
     # faqat oxirgi 20 ta webhook hodisasi ("imported" kirmaydi); butun to'plam xotiraga yuklanmaydi
-    logs = (db.query(CallLog).filter(CallLog.account_id == acc.id, CallLog.status != "imported")
-            .order_by(CallLog.id.desc()).limit(20).all())
-    return render(request, "cabinet.html", user=user, acc=acc, now=now(), error=error, ok=ok, logs=logs,
-                  can_digest=reports_allowed(user),
-                  hook_url=f"{config.BASE_URL}/hook/{acc.hook_token}",
-                  tg_link=f"https://t.me/{config.BOT_USERNAME}?start={acc.link_code}")
+    logs = (
+        db.query(CallLog)
+        .filter(CallLog.account_id == acc.id, CallLog.status != "imported")
+        .order_by(CallLog.id.desc())
+        .limit(20)
+        .all()
+    )
+    return render(
+        request,
+        "cabinet.html",
+        user=user,
+        acc=acc,
+        now=now(),
+        error=error,
+        ok=ok,
+        logs=logs,
+        can_digest=reports_allowed(user),
+        hook_url=f"{config.BASE_URL}/hook/{acc.hook_token}",
+        tg_link=f"https://t.me/{config.BOT_USERNAME}?start={acc.link_code}",
+    )
 
 
 @router.post("/cabinet/pbx")
-def save_pbx(domain: str = Form(...), key: str = Form(""), user: User = Depends(require_user),
-             db: Session = Depends(get_db)):
+def save_pbx(domain: str = Form(...), key: str = Form(""), user: User = Depends(require_user), db: Session = Depends(get_db)):
     user.account.pbx_domain = domain.strip()
     if key.strip():  # bo'sh qoldirilsa eski kalit saqlanadi
         user.account.pbx_key_enc = encrypt(key.strip())
@@ -65,8 +84,7 @@ def _own_chat(db: Session, user: User, chat_pk: int) -> Chat:
 
 
 @router.post("/cabinet/chat")
-def add_chat(chat_id: str = Form(...), lang: str = Form("uz"), user: User = Depends(require_user),
-             db: Session = Depends(get_db)):
+def add_chat(chat_id: str = Form(...), lang: str = Form("uz"), user: User = Depends(require_user), db: Session = Depends(get_db)):
     def back(msg: str):  # xatoni xom JSON o'rniga kabinet sahifasida ko'rsatamiz
         return go("/cabinet", error="Chat qo'shilmadi. " + msg)
 
@@ -105,8 +123,9 @@ def chat_delete(chat_pk: int, user: User = Depends(require_user), db: Session = 
 
 # ---------- Pro sozlamalari ----------
 @router.post("/cabinet/digest")
-def save_digest(on: str | None = Form(None), hour: int = Form(9), user: User = Depends(require_user),
-                db: Session = Depends(get_db)):
+def save_digest(
+    on: str | None = Form(None), hour: int = Form(9), user: User = Depends(require_user), db: Session = Depends(get_db)
+):
     """Kunlik hisobot sozlamasi (Pro): yoqish/o'chirish va yuborish soati (Toshkent vaqti)."""
     if not reports_allowed(user):
         raise HTTPException(403, "Kunlik hisobot Pro tarifda")

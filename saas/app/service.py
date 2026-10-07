@@ -1,4 +1,5 @@
 """Biznes mantiq: qo'ng'iroqni yuborish, Telegram buyruqlari, to'lovni tasdiqlash."""
+
 import logging
 import threading
 import time
@@ -22,6 +23,7 @@ def escape(text) -> str:
     """Telegram HTML uchun: faqat < > & tozalanadi (' va \" ga tegilmaydi)."""
     return _escape(str(text), quote=False)
 
+
 # Qo'ng'iroq tugagan zahoti yozuv fayli hali tayyor bo'lmasligi mumkin: shuncha soniya kutib qayta so'raymiz
 RECORD_RETRY_DELAYS = (5, 15, 30, 60)
 
@@ -38,6 +40,7 @@ def fetch_record(pbx: PbxClient, uuid: str) -> bytes | None:
 
 def store_call_stats(row: CallLog, call: dict) -> None:
     """OnlinePBX qo'ng'iroq ma'lumotini hisobotlar uchun CallLog qatoriga yozadi."""
+
     def num(v):
         try:
             return int(float(v))
@@ -71,8 +74,11 @@ def process_call(db: Session, account_id: int, uuid: str) -> None:
         db.rollback()
         return
     day_start = now().replace(hour=0, minute=0, second=0, microsecond=0)
-    today = db.query(CallLog).filter(CallLog.account_id == acc.id, CallLog.created_at >= day_start,
-                                     CallLog.status != "imported").count()
+    today = (
+        db.query(CallLog)
+        .filter(CallLog.account_id == acc.id, CallLog.created_at >= day_start, CallLog.status != "imported")
+        .count()
+    )
     if acc.active and today > config.MAX_CALLS_PER_DAY:
         log_row.status, log_row.error = "skipped", f"kunlik limit ({config.MAX_CALLS_PER_DAY}) oshdi"
         db.commit()
@@ -113,25 +119,26 @@ def process_call(db: Session, account_id: int, uuid: str) -> None:
 def handle_update(db: Session, u: dict) -> None:
     """Telegramda: /start <kod> (chatni ulash), /id (chat ID), admin uchun to'lov tugmalari. Til kabinetdan o'zgartiriladi."""
     if u.get("callback_query"):
-        return handle_payment_callback(db, u["callback_query"])
+        handle_payment_callback(db, u["callback_query"])
+        return
     msg = u.get("message") or u.get("channel_post")
     if not (msg and msg.get("text", "").startswith("/")):
-        return None
+        return
     chat_id = str(msg["chat"]["id"])
     cmd, _, arg = msg["text"].partition(" ")
     if cmd.split("@")[0] == "/id":
         telegram.send_message(chat_id, f"Chat ID: <code>{chat_id}</code>")
-        return None
+        return
     if cmd.split("@")[0] != "/start" or not arg.strip():
-        return None
+        return
     acc = db.query(Account).filter_by(link_code=arg.strip()).first()
     if not acc:
         telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["bad_code"])
-        return None
+        return
     if not any(c.chat_id == chat_id for c in acc.chats):
         if len(acc.chats) >= acc.max_chats:
             telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["limit"])
-            return None
+            return
         db.add(Chat(account_id=acc.id, chat_id=chat_id, lang=DEFAULT_LANG))
         db.commit()
     telegram.send_message(chat_id, TEMPLATES[DEFAULT_LANG]["linked"])
@@ -185,15 +192,23 @@ def notify_admin_payment(payment_id: int) -> None:
             return
         plan = config.PLANS[p.plan]["name"]
         amount = f"{payment_amount(p):,}".replace(",", " ")
-        caption = (f"💳 <b>Yangi to'lov #{p.id}</b>\n"
-                   f"Mijoz: {escape(p.account.user.email)}\n"
-                   f"Tarif: {escape(plan)} × {p.months} oy\n"
-                   f"Summa: <b>{amount}</b> so'm")
+        caption = (
+            f"💳 <b>Yangi to'lov #{p.id}</b>\n"
+            f"Mijoz: {escape(p.account.user.email)}\n"
+            f"Tarif: {escape(plan)} × {p.months} oy\n"
+            f"Summa: <b>{amount}</b> so'm"
+        )
         caption += f"\nIzoh: {escape(p.comment)}" if p.comment else ""
         if not p.receipt:
             caption += "\n⚠️ Chek yuklanmagan"
-        markup = {"inline_keyboard": [[{"text": "✅ Tasdiqlash", "callback_data": f"pay:ok:{p.id}"},
-                                       {"text": "❌ Rad etish", "callback_data": f"pay:no:{p.id}"}]]}
+        markup = {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ Tasdiqlash", "callback_data": f"pay:ok:{p.id}"},
+                    {"text": "❌ Rad etish", "callback_data": f"pay:no:{p.id}"},
+                ]
+            ]
+        }
         try:
             if not p.receipt:  # chek yo'q: matnli eslatma (izoh bilan) va o'sha tugmalar
                 telegram.send_message(config.ADMIN_CHAT_ID, caption, markup)
@@ -240,10 +255,10 @@ def handle_payment_callback(db: Session, cb: dict) -> None:
 
 # ---------- Eski qo'ng'iroqlarni OnlinePBX tarixidan yuklash (faqat ma'lumot; yozuv fayllari saqlanmaydi) ----------
 IMPORT_DAYS = 30
-IMPORT_SPLIT_AT = 500        # oynada shuncha va undan ko'p qator qaytsa, API javobni qirqqan bo'lishi mumkin: oynani ikkiga bo'lamiz
-IMPORT_MIN_WINDOW = 900      # soniya (15 daqiqa): bundan kichik oynalar bo'linmaydi
-IMPORT_MAX_ROWS = 20_000     # bir yuklashda ko'pi bilan (suiiste'moldan himoya)
-IMPORT_COOLDOWN = 600        # soniya: muvaffaqiyatli yuklashdan keyin qayta yuklashga tanaffus
+IMPORT_SPLIT_AT = 500  # oynada shuncha va undan ko'p qator qaytsa, API javobni qirqqan bo'lishi mumkin: oynani ikkiga bo'lamiz
+IMPORT_MIN_WINDOW = 900  # soniya (15 daqiqa): bundan kichik oynalar bo'linmaydi
+IMPORT_MAX_ROWS = 20_000  # bir yuklashda ko'pi bilan (suiiste'moldan himoya)
+IMPORT_COOLDOWN = 600  # soniya: muvaffaqiyatli yuklashdan keyin qayta yuklashga tanaffus
 _importing: set[int] = set()
 _import_lock = threading.Lock()
 
@@ -267,7 +282,7 @@ def _store_history(db: Session, acc: Account, calls: dict[str, dict]) -> int:
     uuids = list(calls)
     existing: set[str] = set()
     for i in range(0, len(uuids), 500):
-        chunk = uuids[i:i + 500]
+        chunk = uuids[i : i + 500]
         existing |= {u for (u,) in db.query(CallLog.uuid).filter(CallLog.account_id == acc.id, CallLog.uuid.in_(chunk))}
     added = 0
     for u in uuids:
@@ -297,14 +312,14 @@ def _store_history(db: Session, acc: Account, calls: dict[str, dict]) -> int:
                 with db.begin_nested():
                     db.add(row)
                 added += 1
-            except Exception:
-                pass
+            except Exception:  # takror uuid: shu qatorni o'tkazib yuboramiz
+                log.debug("history import: duplicate %s skipped", u)
         db.commit()
     return added
 
 
 def import_history(account_id: int, days: int = IMPORT_DAYS) -> None:
-    """Oxirgi `days` kunning qo'ng'iroqlarini OnlinePBX tarixidan CallLog'ga ('imported') qo'shadi. Takror ishga tushirish xavfsiz."""
+    """Oxirgi `days` kun qo'ng'iroqlarini OnlinePBX tarixidan CallLog'ga ('imported') qo'shadi. Takror ishga tushirish xavfsiz."""
     with _import_lock:
         if account_id in _importing:
             return

@@ -22,14 +22,28 @@ def get_db():
 
 # Eski bazaga qo'shiladigan ustunlar (jadval -> {ustun: DDL}); Alembic o'rniga yengil migratsiya
 _NEW_COLUMNS = {
-    "payments": {"months": "INTEGER DEFAULT 1", "receipt": "VARCHAR(100) DEFAULT ''", "note": "TEXT DEFAULT ''",
-                 "comment": "TEXT DEFAULT ''"},
-    "accounts": {"digest_on": "BOOLEAN DEFAULT TRUE", "digest_hour": "INTEGER DEFAULT 9", "digest_last": "VARCHAR(10) DEFAULT ''",
-                 "missed_on": "BOOLEAN DEFAULT TRUE",
-                 "import_at": "TIMESTAMP", "import_note": "VARCHAR(200) DEFAULT ''"},
-    "call_logs": {"direction": "VARCHAR(10) DEFAULT ''", "caller": "VARCHAR(40) DEFAULT ''",
-                  "callee": "VARCHAR(40) DEFAULT ''", "started_at": "TIMESTAMP", "duration": "INTEGER DEFAULT 0",
-                  "talk": "INTEGER"},
+    "payments": {
+        "months": "INTEGER DEFAULT 1",
+        "receipt": "VARCHAR(100) DEFAULT ''",
+        "note": "TEXT DEFAULT ''",
+        "comment": "TEXT DEFAULT ''",
+    },
+    "accounts": {
+        "digest_on": "BOOLEAN DEFAULT TRUE",
+        "digest_hour": "INTEGER DEFAULT 9",
+        "digest_last": "VARCHAR(10) DEFAULT ''",
+        "missed_on": "BOOLEAN DEFAULT TRUE",
+        "import_at": "TIMESTAMP",
+        "import_note": "VARCHAR(200) DEFAULT ''",
+    },
+    "call_logs": {
+        "direction": "VARCHAR(10) DEFAULT ''",
+        "caller": "VARCHAR(40) DEFAULT ''",
+        "callee": "VARCHAR(40) DEFAULT ''",
+        "started_at": "TIMESTAMP",
+        "duration": "INTEGER DEFAULT 0",
+        "talk": "INTEGER",
+    },
 }
 
 

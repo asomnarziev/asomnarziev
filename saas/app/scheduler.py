@@ -3,6 +3,7 @@
 Bitta jarayonda ishlaydi (bitta uvicorn worker). Takror yuborilmaydi: har akkauntda oxirgi yuborilgan kun saqlanadi
 (`digest_last`), shuning uchun server qayta ishga tushsa ham xabar ikki marta ketmaydi.
 """
+
 import logging
 import threading
 from datetime import UTC, datetime, timedelta
@@ -15,12 +16,12 @@ from .messages import DEFAULT_LANG, LANGS, LOCAL_TZ
 from .models import Account
 
 log = logging.getLogger(__name__)
-MAX_ATTEMPTS = 3          # Telegram xatosida bir kun uchun urinishlar soni, keyin kun "yuborilgan" deb belgilanadi
+MAX_ATTEMPTS = 3  # Telegram xatosida bir kun uchun urinishlar soni, keyin kun "yuborilgan" deb belgilanadi
 _attempts: dict[tuple, int] = {}
 
 
 def send_digest(db: Session, acc: Account, day, test: bool = False) -> int:
-    """`day` kuni bo'yicha hisobotni akkauntning barcha chatlariga (har biri o'z tilida) yuboradi. Muvaffaqiyatli yuborilganlar soni."""
+    """`day` kuni hisobotini akkauntning barcha chatlariga (har biri o'z tilida) yuboradi. Yuborilganlar soni."""
     data = reports.build(reports.load(db, acc.id, day, day), day, day)
     sent = 0
     for chat in acc.chats:

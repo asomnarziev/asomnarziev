@@ -1,4 +1,5 @@
 """To'lov cheklarini xavfsiz saqlash: tur fayl mazmuniga qarab tekshiriladi (nomiga/Content-Type'ga ishonilmaydi)."""
+
 import secrets
 from pathlib import Path
 

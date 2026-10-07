@@ -1,4 +1,5 @@
 """Xavfsizlik: sarlavhalar, CSRF (Origin), kirishdagi brute-force himoyasi, sog'liq tekshiruvi."""
+
 import re
 
 import pytest
@@ -6,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app import ratelimit
 from app.main import app
-from tests.helpers import make_pro, register
+from tests.helpers import register
 
 
 # ---------- Xavfsizlik sarlavhalari ----------
@@ -22,6 +23,7 @@ def test_security_headers_on_pages_and_errors(client):
 def test_route_specific_csp_is_not_overridden(client, tmp_path, monkeypatch):
     """Chek fayli o'zining qat'iy CSP'si bilan beriladi (middleware ustidan yozmaydi)."""
     from app import config
+
     monkeypatch.setattr(config, "UPLOAD_DIR", str(tmp_path))
     register(client, "c@x.uz")
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
@@ -54,15 +56,25 @@ def test_cross_site_post_rejected_but_same_origin_allowed(client):
     evil = {"Origin": "https://evil.example"}
     r = client.post("/cabinet/pbx", data={"domain": "x.onpbx.ru"}, headers=evil)
     assert r.status_code == 403 and "Cross-site" in r.text
-    assert client.post("/cabinet/pbx", data={"domain": "x.onpbx.ru"}, headers={"Referer": "https://evil.example/attack.html"}).status_code == 403
-    assert client.post("/cabinet/pbx", data={"domain": "x.onpbx.ru"}, headers={"Origin": "null"}).status_code == 403  # sandboxed iframe
+    assert (
+        client.post(
+            "/cabinet/pbx", data={"domain": "x.onpbx.ru"}, headers={"Referer": "https://evil.example/attack.html"}
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post("/cabinet/pbx", data={"domain": "x.onpbx.ru"}, headers={"Origin": "null"}).status_code == 403
+    )  # sandboxed iframe
     for ok_origin in ("http://testserver", "http://t"):  # so'rov xosti va BASE_URL xosti
         r = client.post("/cabinet/pbx", data={"domain": "good.onpbx.ru"}, headers={"Origin": ok_origin}, follow_redirects=False)
         assert r.status_code == 303
-    r = client.post("/cabinet/pbx", data={"domain": "ref.onpbx.ru"}, headers={"Referer": "http://testserver/cabinet"}, follow_redirects=False)
+    r = client.post(
+        "/cabinet/pbx", data={"domain": "ref.onpbx.ru"}, headers={"Referer": "http://testserver/cabinet"}, follow_redirects=False
+    )
     assert r.status_code == 303
     from app.db import SessionLocal
     from app.models import Account
+
     with SessionLocal() as db:
         assert db.get(Account, 1).pbx_domain == "ref.onpbx.ru"  # begona so'rovlar hech narsani o'zgartirmagan
 
@@ -71,7 +83,12 @@ def test_cross_site_logout_login_and_safe_methods(client):
     register(client, "c@x.uz")
     assert client.post("/logout", headers={"Origin": "https://evil.example"}).status_code == 403
     assert client.get("/cabinet").status_code == 200  # sessiya saqlanib qoldi
-    assert client.post("/login", data={"email": "c@x.uz", "password": "12345678"}, headers={"Origin": "https://evil.example"}).status_code == 403
+    assert (
+        client.post(
+            "/login", data={"email": "c@x.uz", "password": "12345678"}, headers={"Origin": "https://evil.example"}
+        ).status_code
+        == 403
+    )
     assert client.get("/cabinet", headers={"Origin": "https://evil.example"}).status_code == 200  # GET — xavfsiz usul
 
 
@@ -79,6 +96,7 @@ def test_webhooks_exempt_from_origin_check(client):
     register(client, "c@x.uz")
     from app.db import SessionLocal
     from app.models import Account
+
     with SessionLocal() as db:
         token = db.get(Account, 1).hook_token
     r = client.post(f"/hook/{token}", data={"event": "test"}, headers={"Origin": "https://pbx.onlinepbx.ru"})
@@ -163,8 +181,12 @@ def test_healthz_503_when_database_down(client, monkeypatch):
     import app.main as main
 
     class Broken:
-        def __enter__(self): raise RuntimeError("db down")
-        def __exit__(self, *a): return False
+        def __enter__(self):
+            raise RuntimeError("db down")
+
+        def __exit__(self, *a):
+            return False
+
     monkeypatch.setattr(main, "SessionLocal", Broken)
     r = client.get("/healthz")
     assert r.status_code == 503 and r.json()["status"] == "degraded" and r.json()["db"] is False
@@ -172,7 +194,9 @@ def test_healthz_503_when_database_down(client, monkeypatch):
 
 def test_healthz_reports_dead_scheduler(client):
     class DeadThread:
-        def is_alive(self): return False
+        def is_alive(self):
+            return False
+
     client.app.state.scheduler = (DeadThread(), None)
     try:
         r = client.get("/healthz")

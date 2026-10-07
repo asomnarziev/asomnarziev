@@ -1,4 +1,5 @@
 """Administrator paneli: mijozlar, obunalar, to'lovlarni tasdiqlash."""
+
 from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
@@ -15,11 +16,19 @@ MIN_PASSWORD = 8
 
 
 def _page(request: Request, db: Session, user: User, error=None, created=None):
-    return render(request, "admin.html", user=user, now=now(), error=error, created=created,
-                  accounts=db.query(Account).order_by(Account.id.desc()).all(),
-                  payments=db.query(Payment).filter_by(status="pending").all(),
-                  history=db.query(Payment).filter(Payment.status == "paid").order_by(Payment.id.desc()).limit(20).all(),
-                  plans=config.PLANS, amount=service.payment_amount)
+    return render(
+        request,
+        "admin.html",
+        user=user,
+        now=now(),
+        error=error,
+        created=created,
+        accounts=db.query(Account).order_by(Account.id.desc()).all(),
+        payments=db.query(Payment).filter_by(status="pending").all(),
+        history=db.query(Payment).filter(Payment.status == "paid").order_by(Payment.id.desc()).limit(20).all(),
+        plans=config.PLANS,
+        amount=service.payment_amount,
+    )
 
 
 def _account(db: Session, account_id: int) -> Account:
@@ -42,8 +51,13 @@ def admin(request: Request, user: User = Depends(require_admin), db: Session = D
 
 
 @router.post("/admin/user")
-def create_customer(request: Request, email: str = Form(...), password: str = Form(...),
-                    admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def create_customer(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     email = email.strip().lower()
     error = None
     if len(password) < MIN_PASSWORD:
@@ -62,9 +76,15 @@ def create_customer(request: Request, email: str = Form(...), password: str = Fo
 
 
 @router.post("/admin/account/{account_id}/subscription")
-def manage_subscription(account_id: int, action: str = Form(...), plan: str = Form("start"), days: int = Form(30),
-                        _: User = Depends(require_admin), db: Session = Depends(get_db)):
-    """Obunani qo'lda boshqarish: uzaytirish (tarif bilan) yoki darrov tugatish. Uzaytirish Payment (provider=admin) bilan yoziladi."""
+def manage_subscription(
+    account_id: int,
+    action: str = Form(...),
+    plan: str = Form("start"),
+    days: int = Form(30),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Obunani qo'lda boshqarish: tarif bilan uzaytirish yoki darrov tugatish (uzaytirish tarixga yoziladi)."""
     acc = _account(db, account_id)
     if action == "extend":
         if plan not in config.PLANS or not 1 <= days <= 3650:
@@ -81,8 +101,7 @@ def manage_subscription(account_id: int, action: str = Form(...), plan: str = Fo
 
 
 @router.post("/admin/account/{account_id}/password")
-def set_password(account_id: int, password: str = Form(...), _: User = Depends(require_admin),
-                 db: Session = Depends(get_db)):
+def set_password(account_id: int, password: str = Form(...), _: User = Depends(require_admin), db: Session = Depends(get_db)):
     acc = _account(db, account_id)
     if len(password) < MIN_PASSWORD:
         raise HTTPException(400, f"Parol {MIN_PASSWORD} belgidan qisqa")
@@ -110,8 +129,9 @@ def confirm_payment(payment_id: int, bg: BackgroundTasks, _: User = Depends(requ
 
 
 @router.post("/admin/payment/{payment_id}/reject")
-def reject_payment(payment_id: int, bg: BackgroundTasks, note: str = Form(""), _: User = Depends(require_admin),
-                   db: Session = Depends(get_db)):
+def reject_payment(
+    payment_id: int, bg: BackgroundTasks, note: str = Form(""), _: User = Depends(require_admin), db: Session = Depends(get_db)
+):
     payment = _payment(db, payment_id)
     was_pending = payment.status == "pending"
     service.reject_payment(db, payment, note)

@@ -1,4 +1,5 @@
 """Veb-qatlam uchun umumiy yordamchilar: shablonlar, redirect (flash), autentifikatsiya va ruxsatlar."""
+
 from pathlib import Path
 from urllib.parse import urlencode
 

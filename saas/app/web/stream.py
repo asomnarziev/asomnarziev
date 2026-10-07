@@ -1,4 +1,5 @@
 """Jonli yangilanish: Server-Sent Events (Pro). Baza sessiyasi oqim davomida ushlab turilmaydi."""
+
 import asyncio
 import json
 
@@ -46,5 +47,6 @@ async def live_stream(request: Request):
         finally:
             live.unsubscribe(sub)
 
-    return StreamingResponse(events(), media_type="text/event-stream", headers={
-        "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"})
+    return StreamingResponse(
+        events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"}
+    )

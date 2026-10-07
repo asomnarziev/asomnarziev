@@ -1,4 +1,5 @@
 """Umumiy test sozlamalari: muhit (ilovadan oldin o'rnatiladi) va ikki asosiy fixtura."""
+
 import os
 
 # Ilova import qilinishidan OLDIN: fon rejalashtiruvchi o'chiq, alohida sinov bazasi
