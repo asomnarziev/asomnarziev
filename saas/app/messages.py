@@ -11,11 +11,11 @@ TEMPLATES = {
     "uz": {
         "call": (
             "📞 <b>Qo'ng'iroq yozuvi</b>\n"
-            "Yo'nalish: {direction}\n"
-            "Kimdan: <code>{caller}</code>\n"
-            "Kimga: <code>{callee}</code>\n"
-            "Sana: {date}\n"
-            "Davomiyligi: {duration}"
+            "🧭 Yo'nalish: {direction}\n"
+            "👤 Kimdan: <code>{caller}</code>\n"
+            "👥 Kimga: <code>{callee}</code>\n"
+            "📅 Sana: {date}\n"
+            "⏱ Davomiyligi: {duration}"
         ),
         "direction": {"inbound": "⬇️ Kiruvchi", "outbound": "⬆️ Chiquvchi", "local": "🔁 Ichki"},
         "unknown": "Noma'lum",
@@ -27,10 +27,10 @@ TEMPLATES = {
         "limit": "⚠️ Chatlar limiti tugagan. Tarifni yangilang.",
         "missed": (
             "📵 <b>Javobsiz qo'ng'iroq</b>\n"
-            "Kimdan: <code>{caller}</code>\n"
-            "Kimga: <code>{callee}</code>\n"
-            "Sana: {date}\n"
-            "Jiringlagan: {duration}"
+            "👤 Kimdan: <code>{caller}</code>\n"
+            "👥 Kimga: <code>{callee}</code>\n"
+            "📅 Sana: {date}\n"
+            "🔔 Jiringlagan: {duration}"
         ),
         "pay_ok": "✅ To'lovingiz tasdiqlandi. Obuna {until} gacha faol.",
         "pay_no": "❌ To'lov tasdiqlanmadi. Sababni kabinetdagi «Tarif» sahifasida ko'ring.",
@@ -38,11 +38,11 @@ TEMPLATES = {
     "ru": {
         "call": (
             "📞 <b>Запись звонка</b>\n"
-            "Направление: {direction}\n"
-            "От: <code>{caller}</code>\n"
-            "Кому: <code>{callee}</code>\n"
-            "Дата: {date}\n"
-            "Длительность: {duration}"
+            "🧭 Направление: {direction}\n"
+            "👤 От: <code>{caller}</code>\n"
+            "👥 Кому: <code>{callee}</code>\n"
+            "📅 Дата: {date}\n"
+            "⏱ Длительность: {duration}"
         ),
         "direction": {"inbound": "⬇️ Входящий", "outbound": "⬆️ Исходящий", "local": "🔁 Внутренний"},
         "unknown": "Неизвестно",
@@ -54,10 +54,10 @@ TEMPLATES = {
         "limit": "⚠️ Лимит чатов исчерпан. Обновите тариф.",
         "missed": (
             "📵 <b>Пропущенный звонок</b>\n"
-            "От: <code>{caller}</code>\n"
-            "Кому: <code>{callee}</code>\n"
-            "Дата: {date}\n"
-            "Звонил: {duration}"
+            "👤 От: <code>{caller}</code>\n"
+            "👥 Кому: <code>{callee}</code>\n"
+            "📅 Дата: {date}\n"
+            "🔔 Звонил: {duration}"
         ),
         "pay_ok": "✅ Ваш платёж подтверждён. Подписка активна до {until}.",
         "pay_no": "❌ Платёж не подтверждён. Причину смотрите в кабинете на странице «Тариф».",
