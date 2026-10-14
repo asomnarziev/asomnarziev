@@ -1,0 +1,15 @@
+[Unit]
+Description=Freedom admin bot (MoySklad -> Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=freedom
+WorkingDirectory=/opt/freedom-admin-bot
+ExecStart=/opt/freedom-admin-bot/venv/bin/python -m admin_bot.main
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
