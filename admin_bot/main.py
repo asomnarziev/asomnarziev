@@ -152,6 +152,15 @@ def _notify_super_admins(text: str) -> None:
         logger.error(f"Super adminga ogohlantirish yuborilmadi: {e}")
 
 
+def _short_error(e: Exception) -> str:
+    """Ogohlantirish uchun qisqa sabab: HTTP status yoki xato turi."""
+    import httpx
+    if isinstance(e, httpx.HTTPStatusError):
+        return f"HTTP {e.response.status_code}"
+    text = str(e).replace("`", "'").replace("\n", " ")
+    return f"{type(e).__name__}: {text}"[:150]
+
+
 def poll_job():
     global _poll_counter
     _poll_counter += 1
@@ -166,11 +175,13 @@ def poll_job():
     logger.info(f"🔄 Polling #{_poll_counter} — {tashkent_time} (Tashkent)")
 
     failed = []
+    reasons: dict[str, str] = {}
     for entity, (poller, deleted_fn, formatter) in ENTITIES.items():
         try:
             _process_entity(entity, poller, deleted_fn, formatter, since)
         except Exception as e:
             failed.append(entity)
+            reasons[entity] = _short_error(e)
             logger.error(f"{entity} polling xatolik: {e}")
 
     if failed:
@@ -181,6 +192,7 @@ def poll_job():
             _notify_super_admins(
                 "⚠️ *MoySklad bilan aloqa muammosi*\n"
                 f"{bot_state.consecutive_failures} marta ketma-ket xato: {', '.join(failed)}.\n"
+                f"Sabab: `{reasons[failed[0]]}`\n"
                 "Loglarni tekshiring."
             )
     else:
