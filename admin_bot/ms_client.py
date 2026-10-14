@@ -125,23 +125,21 @@ def _state_name(row: dict) -> str:
     return state.get("name") or "—"
 
 
-def get_counterparty_balance(agent_id: str) -> float:
+def get_counterparty_balance(agent_id: str) -> float | None:
     """
     Kontragentning umumiy qarzdorligini qaytaradi.
     balance manfiy = mijoz qarzdor → Задолженность musbat
     balance musbat = mijoz ortiqcha to'lagan → Задолженность manfiy (ko'rsatilmaydi)
+    Xatolik bo'lsa None (0.0 emas): xabarda noto'g'ri "qarz yo'q" ko'rinmasin.
     """
     url = f"{MS_BASE_URL}/report/counterparty/{agent_id}"
     try:
         with httpx.Client(headers=MS_HEADERS, timeout=_TIMEOUT) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            data = resp.json()
-            balance = data.get("balance", 0)
+            balance = _get_with_retry(client, url).json().get("balance", 0)
             return round(balance / 100 * (-1), 2)
     except Exception as e:
         logger.error(f"Counterparty balance xatolik {agent_id}: {e}")
-    return 0.0
+    return None
 
 
 # ── ОТГРУЗКА (demand) ─────────────────────────────────────────────────────────

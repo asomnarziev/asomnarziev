@@ -10,6 +10,8 @@ WorkingDirectory=/opt/freedom-admin-bot
 ExecStart=/opt/freedom-admin-bot/venv/bin/python -m admin_bot.main
 Restart=always
 RestartSec=10
+TimeoutStopSec=30
+MemoryMax=600M
 
 [Install]
 WantedBy=multi-user.target
