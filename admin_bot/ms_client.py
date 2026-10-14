@@ -16,12 +16,15 @@ Barcha 4 ta hujjat turida:
 
 import httpx
 import logging
+import time
 from datetime import datetime, timezone
 from admin_bot.config import MS_HEADERS, MS_BASE_URL
 
 logger = logging.getLogger(__name__)
 _TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 _MAX_ROWS = 2000  # cheksiz siklga qarshi himoya
+_RETRY_STATUS = {429, 500, 502, 503, 504}
+_RETRY_DELAYS = (2, 5)  # 3 urinish: darhol, 2s, 5s dan keyin
 
 
 # ── Yordamchi funksiyalar ─────────────────────────────────────────────────────
@@ -44,6 +47,31 @@ def _moment_date(moment_str: str) -> str:
         return moment_str[:10]
 
 
+def _get_with_retry(client: httpx.Client, url: str) -> httpx.Response:
+    """GET; vaqtinchalik xatolarda (5xx, 429, tarmoq) qayta urinadi."""
+    last = len(_RETRY_DELAYS)
+    for attempt in range(last + 1):
+        try:
+            resp = client.get(url)
+            if resp.status_code in _RETRY_STATUS and attempt < last:
+                delay = _RETRY_DELAYS[attempt]
+                if resp.status_code == 429:
+                    try:
+                        delay = min(float(resp.headers.get("Retry-After", delay)), 30)
+                    except ValueError:
+                        pass
+                logger.warning(f"MoySklad HTTP {resp.status_code}, {delay}s dan keyin qayta urinish")
+                time.sleep(delay)
+                continue
+            resp.raise_for_status()
+            return resp
+        except httpx.TransportError as e:
+            if attempt == last:
+                raise
+            logger.warning(f"MoySklad tarmoq xatosi ({type(e).__name__}), qayta urinish")
+            time.sleep(_RETRY_DELAYS[attempt])
+
+
 def _get(url: str) -> list[dict]:
     """
     Barcha sahifalarni (limit=100, offset) o'qib qaytaradi.
@@ -55,8 +83,7 @@ def _get(url: str) -> list[dict]:
     with httpx.Client(headers=MS_HEADERS, timeout=_TIMEOUT) as client:
         while True:
             sep = "&" if "?" in url else "?"
-            resp = client.get(f"{url}{sep}offset={offset}")
-            resp.raise_for_status()
+            resp = _get_with_retry(client, f"{url}{sep}offset={offset}")
             data = resp.json()
             batch = data.get("rows", [])
             rows.extend(batch)

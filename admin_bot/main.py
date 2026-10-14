@@ -166,9 +166,14 @@ def poll_job():
     _poll_counter += 1
 
     now = datetime.now(tz=timezone.utc)
-    # Oyna interval*2 + 60s: polling kechiksa ham o'zgarishlar yo'qolmaydi.
-    # Dublikatlardan updated_at tekshiruvi (get_doc) himoya qiladi.
-    since = now - timedelta(seconds=bot_state.poll_interval * 2 + 60)
+    # Oyna oxirgi muvaffaqiyatli pollingdan boshlanadi (60s ustma-ust), shunda
+    # MoySklad uzoq ishlamay qolsa ham o'zgarishlar yo'qolmaydi. Kamida
+    # interval*2 + 60s, ko'pi bilan 24 soat. Dublikatlardan get_doc himoya qiladi.
+    min_window = timedelta(seconds=bot_state.poll_interval * 2 + 60)
+    since = now - min_window
+    if bot_state.last_poll_time is not None:
+        since = min(since, bot_state.last_poll_time - timedelta(seconds=60))
+    since = max(since, now - timedelta(hours=24))
 
     from zoneinfo import ZoneInfo
     tashkent_time = now.astimezone(ZoneInfo("Asia/Tashkent")).strftime("%Y-%m-%d %H:%M:%S")
