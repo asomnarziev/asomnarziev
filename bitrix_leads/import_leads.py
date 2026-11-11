@@ -128,6 +128,9 @@ def main():
     ap.add_argument("--category-id", type=int, default=0, help="sdelka voronkasi ID (0 = asosiy)")
     ap.add_argument("--stage-id", default="NEW", help="bosqich (NEW = НОВЫЕ ЛИДЫ)")
     ap.add_argument("--assigned-by", type=int, default=186, help="mas'ul xodim ID")
+    ap.add_argument("--only-new", action="store_true", help="kontakt Bitrixda bor bo'lsa qatorni o'tkazib yuborish (sdelka ham yaratilmaydi)")
+    ap.add_argument("--limit", type=int, default=0, help="shuncha sdelka yaratilgach to'xtash (0 = hammasi)")
+    ap.add_argument("--uz-only", action="store_true", help="faqat O'zbekiston raqamlari (+998 + 9 xona)")
     a = ap.parse_args()
 
     base = os.environ.get("BITRIX_WEBHOOK_URL", "")
@@ -147,15 +150,25 @@ def main():
         print(split_row(rows[0], cmap, a.source_id))
         return
 
+    if a.uz_only:
+        rows = [r for r in rows if re.fullmatch(r"\+998\d{9}", clean_phone(r.get(next((c for c, k in cmap.items() if k == "PHONE"), ""), "")))]
+        print(f"O'zbek raqamli qatorlar: {len(rows)}")
+
     cache = {}  # telefon -> contact_id (fayl ichidagi takrorlar uchun)
-    created = reused = deals = 0
+    created = reused = deals = skipped = 0
     for n, row in enumerate(rows, start=2):
+        if a.limit and deals >= a.limit:
+            break
         try:
             phone, contact, deal = split_row(row, cmap, a.source_id)
             email = contact.get("EMAIL", [{}])[0].get("VALUE")
             cid = cache.get(phone) if phone else None
             if cid is None:
                 cid = find_contact(base, phone, email)
+                if cid and a.only_new:
+                    skipped += 1
+                    cache[phone] = cid
+                    continue
                 if cid:
                     reused += 1
                 else:
@@ -164,6 +177,9 @@ def main():
                     created += 1
                 if phone:
                     cache[phone] = cid
+            elif a.only_new:
+                skipped += 1
+                continue
             else:
                 reused += 1
             deal["CONTACT_ID"] = cid
@@ -174,7 +190,7 @@ def main():
             deals += 1
         except Exception as e:  # bitta qator xatosi qolganini to'xtatmasin
             print(f"Xato (qator {n}): {e}")
-    print(f"Sdelka: {deals}/{len(rows)}; kontakt yangi: {created}, mavjud: {reused}")
+    print(f"Sdelka: {deals}/{len(rows)}; kontakt yangi: {created}, mavjud: {reused}, o'tkazildi (bor edi): {skipped}")
 
 
 if __name__ == "__main__":
