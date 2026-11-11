@@ -10,3 +10,5 @@ CSV/XLSX fayldan Bitrix24 CRM ga import: har qator uchun telefon (bo'lmasa email
 
 Ustunlar: ism, familiya, telefon, email, kompaniya, izoh, manba, manzil, summa (uz/ru/en nomlar taniladi).
 Telefon `+998...` ga keltiriladi (9 xonali bo'lsa 998 qo'shiladi).
+
+Qo'shimcha bayroqlar: `--only-new` (kontakt Bitrixda bor bo'lsa qatorni o'tkazib yuboradi), `--uz-only` (faqat +998 raqamlar), `--limit N` (N ta sdelka yaratilgach to'xtaydi).

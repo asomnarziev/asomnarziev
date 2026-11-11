@@ -1,7 +1,7 @@
 """CSV/XLSX dan Bitrix24 ga kontakt + sdelka import qiluvchi skript.
 
-Har qator uchun: telefon bo'yicha kontakt qidiriladi; bo'lsa qayta yaratilmaydi,
-yo'q bo'lsa yaratiladi; so'ng sdelka yaratilib, kontaktga bog'lanadi.
+Har qator uchun: telefon boyicha kontakt qidiriladi; bolsa qayta yaratilmaydi,
+yoq bolsa yaratiladi; song sdelka yaratilib, kontaktga boglanadi.
 
 Ishlatish:
     python import_leads.py leads.csv --dry-run     # faqat tekshirish
@@ -9,7 +9,7 @@ Ishlatish:
     python import_leads.py leads.csv --source-id WEB --category-id 0 --stage-id NEW --assigned-by 186
 
 Ustun nomlari (uz/ru/en) avtomatik taniladi, qarang: COLUMN_ALIASES.
-Webhook URL: BITRIX_WEBHOOK_URL muhit o'zgaruvchisida.
+Webhook URL: BITRIX_WEBHOOK_URL muhit ozgaruvchisida.
 """
 import argparse
 import csv
@@ -65,7 +65,7 @@ def clean_phone(p):
     digits = re.sub(r"\D", "", p or "")
     if not digits:
         return ""
-    if len(digits) == 9:  # O'zbekiston mahalliy raqami
+    if len(digits) == 9:  # Ozbekiston mahalliy raqami
         digits = "998" + digits
     return "+" + digits
 
@@ -96,9 +96,17 @@ def split_row(row, cmap, source_id):
     return phone, contact, deal
 
 
+SESSION = requests.Session()  # bitta doimiy ulanish (har sorovga yangi TLS ochilmasin)
+
+
 def call(base, method, payload):
-    for attempt in range(5):
-        r = requests.post(base + method, json=payload, timeout=60)
+    for attempt in range(6):
+        try:
+            r = SESSION.post(base + method, json=payload, timeout=(10, 30))
+        except (requests.ConnectionError, requests.Timeout):
+            SESSION.close()
+            time.sleep(min(2 ** attempt, 20))
+            continue
         if r.status_code in (429, 503):
             time.sleep(2 ** attempt)
             continue
@@ -107,7 +115,7 @@ def call(base, method, payload):
         if "error" in data:
             raise RuntimeError(f"{data['error']}: {data.get('error_description')}")
         return data
-    raise RuntimeError("Bitrix band (rate limit)")
+    raise RuntimeError("Bitrix bilan aloqa yoq yoki band (rate limit)")
 
 
 def find_contact(base, phone, email):
@@ -127,7 +135,10 @@ def main():
     ap.add_argument("--source-id", default="")
     ap.add_argument("--category-id", type=int, default=0, help="sdelka voronkasi ID (0 = asosiy)")
     ap.add_argument("--stage-id", default="NEW", help="bosqich (NEW = НОВЫЕ ЛИДЫ)")
-    ap.add_argument("--assigned-by", type=int, default=186, help="mas'ul xodim ID")
+    ap.add_argument("--assigned-by", type=int, default=186, help="masul xodim ID")
+    ap.add_argument("--only-new", action="store_true", help="kontakt Bitrixda bor bolsa qatorni otkazib yuborish (sdelka ham yaratilmaydi)")
+    ap.add_argument("--limit", type=int, default=0, help="shuncha sdelka yaratilgach toxtash (0 = hammasi)")
+    ap.add_argument("--uz-only", action="store_true", help="faqat Ozbekiston raqamlari (+998 + 9 xona)")
     a = ap.parse_args()
 
     base = os.environ.get("BITRIX_WEBHOOK_URL", "")
@@ -138,7 +149,7 @@ def main():
 
     rows = read_rows(a.file)
     if not rows:
-        sys.exit("Fayl bo'sh")
+        sys.exit("Fayl bosh")
     cmap = map_columns(rows[0].keys())
     print("Taniligan ustunlar:", cmap)
 
@@ -147,15 +158,27 @@ def main():
         print(split_row(rows[0], cmap, a.source_id))
         return
 
+    if a.uz_only:
+        rows = [r for r in rows if re.fullmatch(r"\+998\d{9}", clean_phone(r.get(next((c for c, k in cmap.items() if k == "PHONE"), ""), "")))]
+        print(f"Ozbek raqamli qatorlar: {len(rows)}")
+
     cache = {}  # telefon -> contact_id (fayl ichidagi takrorlar uchun)
-    created = reused = deals = 0
+    created = reused = deals = skipped = 0
     for n, row in enumerate(rows, start=2):
+        if a.limit and deals >= a.limit:
+            break
         try:
             phone, contact, deal = split_row(row, cmap, a.source_id)
             email = contact.get("EMAIL", [{}])[0].get("VALUE")
             cid = cache.get(phone) if phone else None
             if cid is None:
                 cid = find_contact(base, phone, email)
+                if cid and a.only_new:
+                    skipped += 1
+                    if skipped % 50 == 0:
+                        print(f"... otkazildi {skipped} (qator {n})", flush=True)
+                    cache[phone] = cid
+                    continue
                 if cid:
                     reused += 1
                 else:
@@ -164,6 +187,9 @@ def main():
                     created += 1
                 if phone:
                     cache[phone] = cid
+            elif a.only_new:
+                skipped += 1
+                continue
             else:
                 reused += 1
             deal["CONTACT_ID"] = cid
@@ -172,9 +198,11 @@ def main():
             deal["ASSIGNED_BY_ID"] = a.assigned_by
             call(base, "crm.deal.add", {"fields": deal})
             deals += 1
-        except Exception as e:  # bitta qator xatosi qolganini to'xtatmasin
+            if deals % 25 == 0:
+                print(f"... {deals} sdelka", flush=True)
+        except Exception as e:  # bitta qator xatosi qolganini toxtatmasin
             print(f"Xato (qator {n}): {e}")
-    print(f"Sdelka: {deals}/{len(rows)}; kontakt yangi: {created}, mavjud: {reused}")
+    print(f"Sdelka: {deals}/{len(rows)}; kontakt yangi: {created}, mavjud: {reused}, otkazildi (bor edi): {skipped}")
 
 
 if __name__ == "__main__":
