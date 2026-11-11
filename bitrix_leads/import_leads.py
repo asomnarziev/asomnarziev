@@ -98,7 +98,7 @@ def split_row(row, cmap, source_id):
 
 def call(base, method, payload):
     for attempt in range(5):
-        r = requests.post(base + method, json=payload, timeout=60)
+        r = requests.post(base + method, json=payload, timeout=(10, 30))
         if r.status_code in (429, 503):
             time.sleep(2 ** attempt)
             continue
@@ -188,6 +188,8 @@ def main():
             deal["ASSIGNED_BY_ID"] = a.assigned_by
             call(base, "crm.deal.add", {"fields": deal})
             deals += 1
+            if deals % 25 == 0:
+                print(f"... {deals} sdelka", flush=True)
         except Exception as e:  # bitta qator xatosi qolganini to'xtatmasin
             print(f"Xato (qator {n}): {e}")
     print(f"Sdelka: {deals}/{len(rows)}; kontakt yangi: {created}, mavjud: {reused}, o'tkazildi (bor edi): {skipped}")
