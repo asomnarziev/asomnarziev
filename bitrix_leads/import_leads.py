@@ -1,9 +1,12 @@
-"""CSV/XLSX dan Bitrix24 ga lid import qiluvchi skript.
+"""CSV/XLSX dan Bitrix24 ga kontakt + sdelka import qiluvchi skript.
+
+Har qator uchun: telefon bo'yicha kontakt qidiriladi; bo'lsa qayta yaratilmaydi,
+yo'q bo'lsa yaratiladi; so'ng sdelka yaratilib, kontaktga bog'lanadi.
 
 Ishlatish:
     python import_leads.py leads.csv --dry-run     # faqat tekshirish
     python import_leads.py leads.xlsx              # haqiqiy import
-    python import_leads.py leads.csv --source-id WEB --skip-duplicates
+    python import_leads.py leads.csv --source-id WEB --category-id 0
 
 Ustun nomlari (uz/ru/en) avtomatik taniladi, qarang: COLUMN_ALIASES.
 Webhook URL: BITRIX_WEBHOOK_URL muhit o'zgaruvchisida.
@@ -29,7 +32,6 @@ COLUMN_ALIASES = {
     "ADDRESS": ["address", "manzil", "адрес"],
     "OPPORTUNITY": ["amount", "summa", "сумма", "opportunity"],
 }
-BATCH = 50  # Bitrix batch chegarasi
 
 
 def norm(s):
@@ -68,21 +70,30 @@ def clean_phone(p):
     return "+" + digits
 
 
-def build_lead(row, cmap, source_id):
+def split_row(row, cmap, source_id):
     f = {}
     for col, key in cmap.items():
         v = (row.get(col) or "").strip()
         if v:
             f[key] = v
-    if "PHONE" in f:
-        ph = clean_phone(f["PHONE"])
-        f["PHONE"] = [{"VALUE": ph, "VALUE_TYPE": "WORK"}] if ph else []
+    phone = clean_phone(f.get("PHONE", ""))
+    contact = {k: f[k] for k in ("NAME", "LAST_NAME", "ADDRESS") if k in f}
+    if phone:
+        contact["PHONE"] = [{"VALUE": phone, "VALUE_TYPE": "WORK"}]
     if "EMAIL" in f:
-        f["EMAIL"] = [{"VALUE": f["EMAIL"], "VALUE_TYPE": "WORK"}]
-    if source_id and "SOURCE_ID" not in f:
-        f["SOURCE_ID"] = source_id
-    f.setdefault("TITLE", " ".join(filter(None, [f.get("NAME"), f.get("LAST_NAME")])) or "Import lid")
-    return f
+        contact["EMAIL"] = [{"VALUE": f["EMAIL"], "VALUE_TYPE": "WORK"}]
+    contact.setdefault("NAME", f.get("TITLE", "Import"))
+    comments = f.get("COMMENTS", "")
+    if f.get("COMPANY_TITLE"):
+        comments = (comments + "\nKompaniya: " + f["COMPANY_TITLE"]).strip()
+    deal = {"TITLE": f.get("TITLE") or " ".join(filter(None, [f.get("NAME"), f.get("LAST_NAME")])) or "Import sdelka"}
+    if comments:
+        deal["COMMENTS"] = comments
+    if f.get("OPPORTUNITY"):
+        deal["OPPORTUNITY"] = re.sub(r"[^\d.]", "", f["OPPORTUNITY"].replace(",", ".")) or 0
+    if source_id or f.get("SOURCE_ID"):
+        deal["SOURCE_ID"] = f.get("SOURCE_ID") or source_id
+    return phone, contact, deal
 
 
 def call(base, method, payload):
@@ -99,9 +110,14 @@ def call(base, method, payload):
     raise RuntimeError("Bitrix band (rate limit)")
 
 
-def existing_phone(base, phone):
-    res = call(base, "crm.duplicate.findbycomm", {"type": "PHONE", "values": [phone]})["result"]
-    return bool(res and res.get("LEAD"))
+def find_contact(base, phone, email):
+    for typ, val in (("PHONE", phone), ("EMAIL", email)):
+        if not val:
+            continue
+        res = call(base, "crm.duplicate.findbycomm", {"type": typ, "values": [val], "entity_type": "CONTACT"})["result"]
+        if res and res.get("CONTACT"):
+            return int(res["CONTACT"][0])
+    return None
 
 
 def main():
@@ -109,7 +125,7 @@ def main():
     ap.add_argument("file")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--source-id", default="")
-    ap.add_argument("--skip-duplicates", action="store_true", help="telefon bo'yicha mavjud lidni o'tkazib yuborish")
+    ap.add_argument("--category-id", type=int, default=None, help="sdelka voronkasi ID")
     a = ap.parse_args()
 
     base = os.environ.get("BITRIX_WEBHOOK_URL", "")
@@ -122,45 +138,39 @@ def main():
     if not rows:
         sys.exit("Fayl bo'sh")
     cmap = map_columns(rows[0].keys())
-    print("Taniligan ustunlar:", {k: v for k, v in cmap.items()})
-    leads = [build_lead(r, cmap, a.source_id) for r in rows]
-
-    if a.skip_duplicates and not a.dry_run:
-        kept = []
-        for l in leads:
-            ph = l.get("PHONE") and l["PHONE"][0]["VALUE"]
-            if ph and existing_phone(base, ph):
-                continue
-            kept.append(l)
-        print(f"Dublikat o'tkazildi: {len(leads) - len(kept)}")
-        leads = kept
+    print("Taniligan ustunlar:", cmap)
 
     if a.dry_run:
-        print(f"{len(leads)} ta lid. Birinchisi:\n{leads[0]}")
+        print(f"{len(rows)} ta qator. Birinchisi:")
+        print(split_row(rows[0], cmap, a.source_id))
         return
 
-    ok = 0
-    for i in range(0, len(leads), BATCH):
-        chunk = leads[i:i + BATCH]
-        cmd = {str(n): "crm.lead.add?" + requests.compat.urlencode(flatten({"fields": l})) for n, l in enumerate(chunk)}
-        res = call(base, "batch", {"halt": 0, "cmd": cmd})["result"]
-        ok += len(res.get("result", {}))
-        for k, e in (res.get("result_error") or {}).items():
-            print(f"Xato (qator {i + int(k) + 2}): {e}")
-    print(f"Yuklandi: {ok}/{len(leads)}")
-
-
-def flatten(d, prefix=""):
-    out = {}
-    if isinstance(d, dict):
-        for k, v in d.items():
-            out.update(flatten(v, f"{prefix}[{k}]" if prefix else k))
-    elif isinstance(d, list):
-        for i, v in enumerate(d):
-            out.update(flatten(v, f"{prefix}[{i}]"))
-    else:
-        out[prefix] = d
-    return out
+    cache = {}  # telefon -> contact_id (fayl ichidagi takrorlar uchun)
+    created = reused = deals = 0
+    for n, row in enumerate(rows, start=2):
+        try:
+            phone, contact, deal = split_row(row, cmap, a.source_id)
+            email = contact.get("EMAIL", [{}])[0].get("VALUE")
+            cid = cache.get(phone) if phone else None
+            if cid is None:
+                cid = find_contact(base, phone, email)
+                if cid:
+                    reused += 1
+                else:
+                    cid = int(call(base, "crm.contact.add", {"fields": contact})["result"])
+                    created += 1
+                if phone:
+                    cache[phone] = cid
+            else:
+                reused += 1
+            deal["CONTACT_ID"] = cid
+            if a.category_id is not None:
+                deal["CATEGORY_ID"] = a.category_id
+            call(base, "crm.deal.add", {"fields": deal})
+            deals += 1
+        except Exception as e:  # bitta qator xatosi qolganini to'xtatmasin
+            print(f"Xato (qator {n}): {e}")
+    print(f"Sdelka: {deals}/{len(rows)}; kontakt yangi: {created}, mavjud: {reused}")
 
 
 if __name__ == "__main__":
