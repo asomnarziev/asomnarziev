@@ -6,7 +6,7 @@ yo'q bo'lsa yaratiladi; so'ng sdelka yaratilib, kontaktga bog'lanadi.
 Ishlatish:
     python import_leads.py leads.csv --dry-run     # faqat tekshirish
     python import_leads.py leads.xlsx              # haqiqiy import
-    python import_leads.py leads.csv --source-id WEB --category-id 0
+    python import_leads.py leads.csv --source-id WEB --category-id 0 --stage-id NEW --assigned-by 186
 
 Ustun nomlari (uz/ru/en) avtomatik taniladi, qarang: COLUMN_ALIASES.
 Webhook URL: BITRIX_WEBHOOK_URL muhit o'zgaruvchisida.
@@ -125,7 +125,9 @@ def main():
     ap.add_argument("file")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--source-id", default="")
-    ap.add_argument("--category-id", type=int, default=None, help="sdelka voronkasi ID")
+    ap.add_argument("--category-id", type=int, default=0, help="sdelka voronkasi ID (0 = asosiy)")
+    ap.add_argument("--stage-id", default="NEW", help="bosqich (NEW = НОВЫЕ ЛИДЫ)")
+    ap.add_argument("--assigned-by", type=int, default=186, help="mas'ul xodim ID")
     a = ap.parse_args()
 
     base = os.environ.get("BITRIX_WEBHOOK_URL", "")
@@ -157,6 +159,7 @@ def main():
                 if cid:
                     reused += 1
                 else:
+                    contact["ASSIGNED_BY_ID"] = a.assigned_by
                     cid = int(call(base, "crm.contact.add", {"fields": contact})["result"])
                     created += 1
                 if phone:
@@ -164,8 +167,9 @@ def main():
             else:
                 reused += 1
             deal["CONTACT_ID"] = cid
-            if a.category_id is not None:
-                deal["CATEGORY_ID"] = a.category_id
+            deal["CATEGORY_ID"] = a.category_id
+            deal["STAGE_ID"] = a.stage_id
+            deal["ASSIGNED_BY_ID"] = a.assigned_by
             call(base, "crm.deal.add", {"fields": deal})
             deals += 1
         except Exception as e:  # bitta qator xatosi qolganini to'xtatmasin
