@@ -96,9 +96,17 @@ def split_row(row, cmap, source_id):
     return phone, contact, deal
 
 
+SESSION = requests.Session()  # bitta doimiy ulanish (har so'rovga yangi TLS ochilmasin)
+
+
 def call(base, method, payload):
-    for attempt in range(5):
-        r = requests.post(base + method, json=payload, timeout=(10, 30))
+    for attempt in range(6):
+        try:
+            r = SESSION.post(base + method, json=payload, timeout=(10, 30))
+        except (requests.ConnectionError, requests.Timeout):
+            SESSION.close()
+            time.sleep(min(2 ** attempt, 20))
+            continue
         if r.status_code in (429, 503):
             time.sleep(2 ** attempt)
             continue
@@ -107,7 +115,7 @@ def call(base, method, payload):
         if "error" in data:
             raise RuntimeError(f"{data['error']}: {data.get('error_description')}")
         return data
-    raise RuntimeError("Bitrix band (rate limit)")
+    raise RuntimeError("Bitrix bilan aloqa yo'q yoki band (rate limit)")
 
 
 def find_contact(base, phone, email):
@@ -167,6 +175,8 @@ def main():
                 cid = find_contact(base, phone, email)
                 if cid and a.only_new:
                     skipped += 1
+                    if skipped % 50 == 0:
+                        print(f"... o'tkazildi {skipped} (qator {n})", flush=True)
                     cache[phone] = cid
                     continue
                 if cid:
